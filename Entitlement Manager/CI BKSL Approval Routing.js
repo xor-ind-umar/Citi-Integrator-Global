@@ -9,7 +9,7 @@
 * @author Umar
 *
 * Script brief description:
-- This script is used to return the Entitlement Details to be showed in Entitlement Manager for Citi Integrator.
+- This script is used to return the pending approval VBD Details to be showed in Approval dashboard for Citi Integrator.
 *
 *
 * Revision History:
@@ -19,10 +19,10 @@
 * 2026/07/13                          Vishal Pitale        	    Initial version
 */
 
-define(['N/search', 'N/record', 'N/https'],
-	function (search, record, https) {
+define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
+	function (search, record, https, query, runtime) {
 
-		var saveMaxLimit = 25;
+		let saveMaxLimit = 25;
 
 		function onRequest(context) {
 			log.debug("onRequest Function Start");
@@ -35,135 +35,118 @@ define(['N/search', 'N/record', 'N/https'],
 
 			} catch (e) { log.error('Error', e); }
 		}
-
-		// Get Method Function.
-		function getMethod(context) {
-
-			var entitlementList = new Array();
-
-			// Searching active roles which are valid.
-			var roleSearch = search.create({ type: search.Type.ROLE, filters: [['isinactive', 'is', 'F']], columns: ['name'] });
-
-			roleSearch = getFullResultSet(roleSearch);
-			log.audit('roleSearch', roleSearch);
-
-			// Searching active employees with roles assigned.
-			var empSearch = search.create({
-				type: search.Type.EMPLOYEE,
-				filters: [['isinactive', 'is', 'F'], 'AND', ['role', 'noneof', '@NONE@']],
-				columns: ['entityid', 'email', 'role']
-			});
-
-			empSearch = getFullResultSet(empSearch);
-			log.audit('empSearch', empSearch);
-
-			// Executing the code only when the employee search is not empty.
-			if (!isEmpty(empSearch)) {
-
-				// Populating the Entitlement List.
-				for (var loop1 = 0; loop1 < empSearch.length; loop1++) {
-
-					var employeeId = empSearch[loop1].id;
-					var employeeName = empSearch[loop1].getValue({ name: 'entityid' });
-					var employeeEmail = empSearch[loop1].getValue({ name: 'email' });
-					var employeeRoleId = empSearch[loop1].getValue({ name: 'role' });
-					var employeeRoleName = empSearch[loop1].getText({ name: 'role' });
-
-					// Traversing through the role list to allow acceptable roles only.
-					for (var loop11 = 0; loop11 < roleSearch.length; loop11++) {
-						var existingRoleId = roleSearch[loop11].id;
-
-						// Allowing only selectable roles from Entitlement Manager record to be shown in the list.
-						if (employeeRoleId == existingRoleId) {
-							entitlementList.push({
-								employeeId: employeeId,
-								employeeName: employeeName,
-								employeeRoleId: employeeRoleId,
-								employeeRoleName: employeeRoleName,
-								employeeEmail: employeeEmail,
-								accountsDashboard: false,
-								// accountsConfiguration: false,
-								// dataExportHub: false,
-								// accountDetails: false,
-								invoicePayments: false,
-								vendorBankDetails: false,
-								// invoicePaymentsPayNow: false,
-								vendorBankDetailsApprover: false //rutuja 21st sept
-							});
-							break;
-						}
-					}
-				}
-
-
-				// Searching the Entitlement Management table.
-				var entMgrSearch = search.create({
-					type: 'customrecord_ci_entitlement_manager', filters: [['isinactive', 'is', 'F']],
-					columns: ['custrecord_ci_ent_mgr_user', 'custrecord_ci_ent_mgr_user_role', 'custrecord_ci_ent_mgr_user_permissions']
-				});
-
-				entMgrSearch = getFullResultSet(entMgrSearch);
-				log.audit('entMgrSearch', entMgrSearch);
-
-				// Executing the code only when the Entitlement Manager search is not empty.
-				if (!isEmpty(entMgrSearch)) {
-
-					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
-					for (var loop2 = 0; loop2 < entitlementList.length; loop2++) {
-
-						var listEmpId = entitlementList[loop2].employeeId;
-						var listEmpRoleId = entitlementList[loop2].employeeRoleId;
-
-						for (var loop3 = 0; loop3 < entMgrSearch.length; loop3++) {
-
-							var mgrEmpId = entMgrSearch[loop3].getValue({ name: 'custrecord_ci_ent_mgr_user' });
-							var mgrRoleId = entMgrSearch[loop3].getValue({ name: 'custrecord_ci_ent_mgr_user_role' });
-
-							// Matching the Employee and Roles to apply permissions from Entitlement Manager Search.
-							if (listEmpId == mgrEmpId && listEmpRoleId == mgrRoleId) {
-
-								var permissionListVal = entMgrSearch[loop3].getText({ name: 'custrecord_ci_ent_mgr_user_permissions' });
-
-								// Executing the code only when the permissions are not empty.
-								if (!isEmpty(permissionListVal)) {
-									permissionListVal = permissionListVal.split(',');
-									log.audit('mgrEmpId', mgrEmpId);
-
-									log.audit('permissionListVal', permissionListVal);
-
-
-									// Updating the permissions.
-									for (var loop4 = 0; loop4 < permissionListVal.length; loop4++) {
-										var permissionValue = permissionListVal[loop4];
-
-										if (permissionValue == 'Accounts Dashboard') { entitlementList[loop2].accountsDashboard = true; }
-										// if (permissionValue == 'Accounts Configuration (inactive)') { entitlementList[loop2].accountsConfiguration = true; }
-										// if (permissionValue == 'Data Export Hub (inactive)') { entitlementList[loop2].dataExportHub = true; }
-										// if (permissionValue == 'Account Details (inactive)') { entitlementList[loop2].accountDetails = true; }
-										if (permissionValue == 'Invoice Payments') { entitlementList[loop2].invoicePayments = true; }
-										if (permissionValue == 'Vendor Bank Details') { entitlementList[loop2].vendorBankDetails = true; }
-										// if (permissionValue == 'Invoice Payments Pay Now (inactive)') { entitlementList[loop2].invoicePaymentsPayNow = true; }
-										if (permissionValue == 'Vendor Bank Details Approver') { entitlementList[loop2].vendorBankDetailsApprover = true; } //rutuja 21st sept
-									}
-								}
-							}
-						}
-					}
-				}
+		function cleanObject(jsonValue) {
+			if (!jsonValue) {
+				return {};
 			}
 
-			log.audit('entitlementList', entitlementList);
+			if (typeof jsonValue === 'object') {
+				return jsonValue;
+			}
 
-			var bodyVal = { 'saveMaxLimit': saveMaxLimit, 'entitlementList': entitlementList };
-			// return JSON.stringify(bodyVal);
-
-			context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
-			// context.response.write(JSON.stringify(bodyVal));
-			context.response.write(JSON.stringify(bodyVal));
+			try {
+				const parsedValue = JSON.parse(jsonValue);
+				return parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)
+					? parsedValue
+					: {};
+			} catch (error) {
+				log.error('Invalid JSON value', { jsonValue: jsonValue, error: error });
+				return {};
+			}
 		}
+		// Get Method Function.
+		function getMethod(context) {
+			try {
+				let VBDlist = new Array();
+				let userList = new Array();
+				let approvalStatusList = 'customlist_ci_adv_approval_status';
+				let approvalValue = 'Pending Approval';
+				queryApprovaldIds = `SELECT id FROM ${approvalStatusList} WHERE name = '${approvalValue}'`;
+				//This is used to retrieve the internal id of the approval status with the name 'Pending Approval'
+				let queryResults = query.runSuiteQL({ query: queryApprovaldIds }).asMappedResults();
+				log.debug('queryResults', queryResults)
+				// Convert each matching list row into the internal ID used by the search filter.
+				let approvalStatusId = queryResults.map((result) => result.id);
+				log.debug('approvalStatusId', approvalStatusId);
+				let currentUser = runtime.getCurrentUser();
 
+				let queryEntitle = `SELECT id FROM customlist_ci_entitlements WHERE name = 'Vendor Bank Details Approver'`;
+				//This is used to retrieve the internal id of the entitlement with the name 'Vendor Bank Details Approver' or 'Vendor Bank Details'
+				let queryEntitleId = query.runSuiteQL({ query: queryEntitle }).asMappedResults();
+				log.debug('queryEntitleId', queryEntitleId);
+				queryEntitleId = queryEntitleId.map((result) => result.id);
+				log.debug('queryEntitleId mapped', queryEntitleId);
 
+				let queryEntitledResults = [];
+				if (queryEntitleId.length > 0) {
+					queryEntitledResults = search.create({ type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId], 'AND', ['custrecord_ci_ent_mgr_user', 'anyof', currentUser.id], 'AND', ['custrecord_ci_ent_mgr_user_role', 'anyof', currentUser.role]] }).run().getRange({ start: 0, end: 1000 });
+					log.debug('queryEntitledResults', queryEntitledResults);
+				}
+				let isCurrentUserEntitled = false, isCreatorCurrentUser = false;
+				if (queryEntitledResults && queryEntitledResults.length > 0) isCurrentUserEntitled = true;
+				log.debug('isCurrentUserEntitled', isCurrentUserEntitled);
 
+				// Searching the VBD details table.
+				let VBDSearch = search.create({
+					type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId]],
+					columns: ['custrecordci_adv_details', 'custrecord_ci_old_values', 'custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', 'lastmodified']
+				});
+
+				VBDSearch = getFullResultSet(VBDSearch);
+				log.audit('VBDSearch', VBDSearch);
+				log.audit('VBDSearch length', VBDSearch.length);
+				log.audit('VBDSearch length', VBDSearch.length);
+
+				// Executing the code only when the Entitlement Manager search is not empty.
+				if (!isEmpty(VBDSearch)) {
+					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
+					for (let vbd = 0; vbd < VBDSearch.length; vbd++) {
+						log.audit('VBDSearch current record', VBDSearch[vbd].getText('custrecordci_adv_details'));
+						log.audit('custrecord_ci_old_values', VBDSearch[vbd].getValue('custrecord_ci_old_values'));
+						log.audit('custrecord_ci_edited_values', VBDSearch[vbd].getValue('custrecord_ci_edited_values'));
+						log.audit('custrecord_ci_adv_createdby', VBDSearch[vbd].getValue('custrecord_ci_adv_createdby'));
+						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified');
+						if (VBDSearch[vbd].getText('custrecord_ci_adv_createdby') == currentUser.name) { isCreatorCurrentUser = true; }
+						VBDlist.push({
+							requestedBy: VBDSearch[vbd].getText('custrecord_ci_adv_createdby'),
+							requestedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_creator_role'),
+							vendorname: VBDSearch[vbd].getText('custrecordci_adv_details'),
+							createdAt: VBDSearch[vbd].getValue('created'),
+							modified: modified,
+							modifiedBy: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by'),
+							modifiedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by_role'),
+							oldValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_old_values')),
+							newValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_edited_values')),
+							lastModified: VBDSearch[vbd].getValue('lastmodified'),
+							VBDId: VBDSearch[vbd].id,
+							isCreatorCurrentUser: isCreatorCurrentUser,
+
+						});
+						log.debug('modified', modified)
+						if (modified === false || modified === 'F') // For the Create Record only showing the new value by renaming the oldValue key to newValue.
+						{
+							let item = VBDlist[VBDlist.length - 1];
+							if (Object.prototype.hasOwnProperty.call(item, 'oldValue')) {
+								item.newValue = item.oldValue;
+								delete item.oldValue;
+								log.audit('Renamed oldValue to newValue for create record', item);
+							}
+						}
+						log.debug('VBDlist after processing create record', JSON.stringify(VBDlist));
+					}
+				}
+				userList.push({ isCurrentUserEntitled: isCurrentUserEntitled, currentUser: currentUser.name, currentuserId: currentUser.id, CurrentuserRole: currentUser.role });
+				var bodyVal = { 'approvalList': VBDlist, 'runtimeUser': userList };
+				log.debug('bodyVal', JSON.stringify(bodyVal))
+				context.response.setHeader({ name: 'Content-Type', value: 'application/json; charset=UTF-8' });
+				context.response.write({ output: JSON.stringify(bodyVal) });
+
+			} catch (error) {
+				log.error('Error processing request', error);
+				context.response.write({ output: JSON.stringify({ error: error.message }) });
+			}
+
+		}
 		/**
 		* Retrieves the entire result set
 		* @param {search.Search} mySearch
@@ -174,22 +157,21 @@ define(['N/search', 'N/record', 'N/https'],
 				pagedData;
 			pagedData = mySearch.runPaged({ pageSize: 1000 });
 			pagedData.pageRanges.forEach(function (pageRange) {
-				var page = pagedData.fetch({ index: pageRange.index });
+				let page = pagedData.fetch({ index: pageRange.index });
 				page.data.forEach(function (result) {
 					searchResults.push(result);
 				});
 			});
 			return searchResults;
 		}
-
 		/**
 		* Check if value is empty (null, undefined, empty array, empty object)
 		* @param {string|[]|{}} stValue
 		* @returns {boolean} - Returns true if the input value is empty
 		*/
 		function isEmpty(stValue) {
-			return ((stValue == 0 || stValue === '' || stValue == null || stValue == undefined) || (stValue.constructor === Array && stValue.length == 0) || (stValue.constructor === Object && (function (v) {
-				for (var k in v)
+			return ((stValue == 0 || stValue === '' || stValue == null || stValue == undefined) || (stValue.letructor === Array && stValue.length == 0) || (stValue.letructor === Object && (function (v) {
+				for (let k in v)
 					return false;
 				return true;
 			})(stValue)));
