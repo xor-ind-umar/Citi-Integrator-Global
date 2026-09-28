@@ -25,7 +25,7 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 		let saveMaxLimit = 25;
 
 		function onRequest(context) {
-			log.debug("onRequest Function Start");
+			log.audit("onRequest Function Start");
 			try {
 
 				// Conditional Exection for GET method.
@@ -64,27 +64,25 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 				queryApprovaldIds = `SELECT id FROM ${approvalStatusList} WHERE name = '${approvalValue}'`;
 				//This is used to retrieve the internal id of the approval status with the name 'Pending Approval'
 				let queryResults = query.runSuiteQL({ query: queryApprovaldIds }).asMappedResults();
-				log.debug('queryResults', queryResults)
 				// Convert each matching list row into the internal ID used by the search filter.
 				let approvalStatusId = queryResults.map((result) => result.id);
-				log.debug('approvalStatusId', approvalStatusId);
+				log.audit('queryResults', `Result: ${JSON.stringify(queryResults)} approvalStatusId: ${approvalStatusId}`);
 				let currentUser = runtime.getCurrentUser();
 
 				let queryEntitle = `SELECT id FROM customlist_ci_entitlements WHERE name = 'Vendor Bank Details Approver'`;
 				//This is used to retrieve the internal id of the entitlement with the name 'Vendor Bank Details Approver' or 'Vendor Bank Details'
 				let queryEntitleId = query.runSuiteQL({ query: queryEntitle }).asMappedResults();
-				log.debug('queryEntitleId', queryEntitleId);
+				log.audit('queryEntitleId', queryEntitleId);
 				queryEntitleId = queryEntitleId.map((result) => result.id);
-				log.debug('queryEntitleId mapped', queryEntitleId);
+				log.audit('queryEntitleId mapped', queryEntitleId);
 
 				let queryEntitledResults = [];
 				if (queryEntitleId.length > 0) {
 					queryEntitledResults = search.create({ type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId], 'AND', ['custrecord_ci_ent_mgr_user', 'anyof', currentUser.id], 'AND', ['custrecord_ci_ent_mgr_user_role', 'anyof', currentUser.role]] }).run().getRange({ start: 0, end: 1000 });
-					log.debug('queryEntitledResults', queryEntitledResults);
 				}
 				let isCurrentUserEntitled = false, isCreatorCurrentUser = false;
 				if (queryEntitledResults && queryEntitledResults.length > 0) isCurrentUserEntitled = true;
-				log.debug('isCurrentUserEntitled', isCurrentUserEntitled);
+				log.audit('queryEntitledResults',` queryEntitledResults ${queryEntitledResults} isCurrentUserEntitled : ${isCurrentUserEntitled}`);
 
 				// Searching the VBD details table.
 				let VBDSearch = search.create({
@@ -93,18 +91,12 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 				});
 
 				VBDSearch = getFullResultSet(VBDSearch);
-				log.audit('VBDSearch', VBDSearch);
-				log.audit('VBDSearch length', VBDSearch.length);
-				log.audit('VBDSearch length', VBDSearch.length);
+				log.audit('VBD SearchResults', `VBDSearch: ${VBDSearch}, VBDSearch length: ${VBDSearch.length}`);
 
 				// Executing the code only when the Entitlement Manager search is not empty.
 				if (!isEmpty(VBDSearch)) {
 					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
 					for (let vbd = 0; vbd < VBDSearch.length; vbd++) {
-						log.audit('VBDSearch current record', VBDSearch[vbd].getText('custrecordci_adv_details'));
-						log.audit('custrecord_ci_old_values', VBDSearch[vbd].getValue('custrecord_ci_old_values'));
-						log.audit('custrecord_ci_edited_values', VBDSearch[vbd].getValue('custrecord_ci_edited_values'));
-						log.audit('custrecord_ci_adv_createdby', VBDSearch[vbd].getValue('custrecord_ci_adv_createdby'));
 						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified');
 						if (VBDSearch[vbd].getText('custrecord_ci_adv_createdby') == currentUser.name) { isCreatorCurrentUser = true; }
 						VBDlist.push({
@@ -122,7 +114,7 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 							isCreatorCurrentUser: isCreatorCurrentUser,
 
 						});
-						log.debug('modified', modified)
+						log.audit('modified', modified)
 						if (modified === false || modified === 'F') // For the Create Record only showing the new value by renaming the oldValue key to newValue.
 						{
 							let item = VBDlist[VBDlist.length - 1];
@@ -132,12 +124,12 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 								log.audit('Renamed oldValue to newValue for create record', item);
 							}
 						}
-						log.debug('VBDlist after processing create record', JSON.stringify(VBDlist));
+						log.audit('VBDlist after processing create record', JSON.stringify(VBDlist));
 					}
 				}
 				userList.push({ isCurrentUserEntitled: isCurrentUserEntitled, currentUser: currentUser.name, currentuserId: currentUser.id, CurrentuserRole: currentUser.role });
 				var bodyVal = { 'approvalList': VBDlist, 'runtimeUser': userList };
-				log.debug('bodyVal', JSON.stringify(bodyVal))
+				log.audit('bodyVal', JSON.stringify(bodyVal))
 				context.response.setHeader({ name: 'Content-Type', value: 'application/json; charset=UTF-8' });
 				context.response.write({ output: JSON.stringify(bodyVal) });
 
