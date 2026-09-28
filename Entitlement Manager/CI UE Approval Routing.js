@@ -55,7 +55,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			}
 		} catch (error) {
 			// Create-mode records may not expose display text until after they are saved.
-			log.debug({ title: 'Display text unavailable', details: { fieldId, error } });
+			log.audit({ title: 'Display text unavailable', details: { fieldId, error } });
 		}
 
 		if (fieldLabel === 'Parent Vendor') {
@@ -121,7 +121,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		const queryResults = query.runSuiteQL({ query: queryEntitledIds }).asMappedResults();
 		// Convert each matching list row into the internal ID used by the search filter.
 		const entitlementIds = queryResults.map((result) => result.id);
-		log.debug({
+		log.audit({
 			title: 'Entitlement IDs',
 			details: entitlementIds
 		}); */
@@ -240,7 +240,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			// Store the value that existed immediately before this edit.
 			previousValues[fieldLabel] = getFieldDisplayValue(oldRecord, fieldId);
 		});
-		log.debug('243', previousValues);
+		log.audit('243', previousValues);
 		return removeGeneratedInputFields(previousValues);
 	};
 
@@ -273,9 +273,9 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			fieldId: oldRecord ? CONFIG.createValuesFieldId : targetFieldId,
 			value: JSON.stringify(previousValues)
 		});
-		log.debug('previousValues', previousValues);
-		log.debug('editedValuesToPersist', editedValuesToPersist);
-		log.debug('valuesToStore', valuesToStore);
+		log.audit('previousValues', previousValues);
+		log.audit('editedValuesToPersist', editedValuesToPersist);
+		log.audit('valuesToStore', valuesToStore);
 		newRecord.setValue({
 			fieldId: oldRecord ? CONFIG.editedValuesFieldId : targetFieldId,
 			value: JSON.stringify(editedValuesToPersist)/* //oldRecord
@@ -295,7 +295,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		});
 		const createdValues = collectValuesToStore(savedRecord, null);
 		let applist = getApproverList();
-		log.debug({title: 'Approver List',details: applist});
+		log.audit({title: 'Approver List',details: applist});
 		// Update only the creation JSON field with the display values from the saved record.
 		record.submitFields({
 			type: CONFIG.VBDrecordType,
@@ -310,9 +310,9 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		let queryEntitle = `SELECT id FROM customlist_ci_entitlements WHERE name = 'Vendor Bank Details Approver'`;
 		//This is used to retrieve the internal id of the entitlement with the name 'Vendor Bank Details Approver' or 'Vendor Bank Details'
 		let queryEntitleId = query.runSuiteQL({ query: queryEntitle }).asMappedResults();
-		log.debug('queryEntitleId', queryEntitleId);
+		log.audit('queryEntitleId', queryEntitleId);
 		queryEntitleId = queryEntitleId.map((result) => result.id);
-		log.debug('queryEntitleId mapped', queryEntitleId);
+		log.audit('queryEntitleId mapped', queryEntitleId);
 
 		var entitlelist = search.create({type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId]], columns:["custrecord_ci_ent_mgr_user"]})
 
@@ -347,7 +347,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		// Read the user and role of the person performing the operation.
 		const currentUser = runtime.getCurrentUser();
 		//When the old record exists, it means the current operation is an edit.
-		if (oldRecord) {
+		if (oldRecord) { 
 			newRecord.setValue({
 				fieldId: 'custrecord_ci_adv_modified_by',
 				value: currentUser.id
@@ -380,7 +380,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		// Creation and edit operations require different entitlement names.
 		const entitlementName = oldRecord ? CONFIG.editEntitlementName : CONFIG.createEntitlementName;
 		// Verify that this user, role, and entitlement are allowed together.
-		log.debug({
+		log.audit({
 			title: 'Finding matching records for user entitlement',
 			details: { userId: currentUser.id, roleId: currentUser.role, inputValue, entitlementName }
 		}); */
@@ -417,7 +417,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		// Step 3: collect only the values relevant to this create or edit.
 		const valuesToStore = collectValuesToStore(newRecord, oldRecord);
 		// Log the final payload for troubleshooting and approval processing.
-		log.debug({
+		log.audit({
 			title: 'Values to store',
 			details: valuesToStore
 		});
