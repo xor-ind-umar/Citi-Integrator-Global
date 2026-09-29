@@ -78,11 +78,12 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 
 				let queryEntitledResults = [];
 				if (queryEntitleId.length > 0) {
-					queryEntitledResults = search.create({ type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId], 'AND', ['custrecord_ci_ent_mgr_user', 'anyof', currentUser.id], 'AND', ['custrecord_ci_ent_mgr_user_role', 'anyof', currentUser.role]] }).run().getRange({ start: 0, end: 1000 });
+					queryEntitledResults = search.create({ type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId], 'AND', ['custrecord_ci_ent_mgr_user', 'anyof', currentUser.id], 'AND', ['custrecord_ci_ent_mgr_user_role', 'anyof', currentUser.role]] }).run().getRange({ start: 0, end: 1 });
 				}
-				let isCurrentUserEntitled = false, isCreatorCurrentUser = false;
+				let isCurrentUserEntitled = false;
+				let isCreatorCurrentUser;
 				if (queryEntitledResults && queryEntitledResults.length > 0) isCurrentUserEntitled = true;
-				log.audit('queryEntitledResults',` queryEntitledResults ${queryEntitledResults} isCurrentUserEntitled : ${isCurrentUserEntitled}`);
+				log.audit('queryEntitledResults',` queryEntitledResults: ${queryEntitledResults} isCurrentUserEntitled : ${isCurrentUserEntitled}`);
 
 				// Searching the VBD details table.
 				let VBDSearch = search.create({
@@ -98,7 +99,8 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
 					for (let vbd = 0; vbd < VBDSearch.length; vbd++) {
 						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified');
-						if (VBDSearch[vbd].getText('custrecord_ci_adv_createdby') == currentUser.name) { isCreatorCurrentUser = true; }
+						if (VBDSearch[vbd].getText('custrecord_ci_adv_createdby') == currentUser.name || VBDSearch[vbd].getText('custrecord_ci_adv_modified_by') == currentUser.name) 
+						{ isCreatorCurrentUser = true; }else{isCreatorCurrentUser = false;}
 						VBDlist.push({
 							requestedBy: VBDSearch[vbd].getText('custrecord_ci_adv_createdby'),
 							requestedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_creator_role'),
