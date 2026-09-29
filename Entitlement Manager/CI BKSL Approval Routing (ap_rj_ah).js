@@ -100,6 +100,9 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 					var rejectedReason = approvalsList[0].rejectionReason;
 					values['custrecord_ci_adv_reject_reason'] = rejectedReason;
 				}
+				else{
+					values['custrecord_ci_adv_reject_reason'] = '';
+				}
 				var submitResultId = record.submitFields({type: 'customrecord_ci_adv_entity_bank_details', id: vendorBankDetailsId, values: values});
 				log.audit(`Values to submit ${JSON.stringify(values)} submitResultId ${submitResultId}`);
 				var customrecordciadventitybankdetails = search.create({type: "customrecord_ci_adv_entity_bank_details",filters: [["internalid", "anyof", vendorBankDetailsId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]], columns: ['created', 'lastmodified', 'lastmodifiedby']
@@ -150,8 +153,8 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 				if (queryEntitledResults && queryEntitledResults.length > 0) isCurrentUserEntitled = true;
 				log.debug('isCurrentUserEntitled', isCurrentUserEntitled); */
 
-				// Searching the VBD details table.
-				let VBDSearch = search.create({type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]],columns: ['custrecordci_adv_details', 'custrecord_ci_old_values','custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', 'lastmodified','lastmodifiedby','custrecord_ci_adv_reject_reason']});
+				// Searching the VBD details table by filterign the with specifc field called approval status.
+				let VBDSearch = search.create({type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]],columns: ['custrecordci_adv_details', 'custrecord_ci_old_values','custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', 'lastmodified','lastmodifiedby','custrecord_ci_adv_reject_reason','custrecord_ci_adv_approval_status']});
 
 				VBDSearch = getFullResultSet(VBDSearch);
 				log.audit('VBDSearch',`VBDSearch: ${JSON.stringify(VBDSearch)} VBDSearch length: ${VBDSearch.length}`);
@@ -161,21 +164,25 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
 					for (let vbd = 0; vbd < VBDSearch.length; vbd++) {
 						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified');
-					//	if (VBDSearch[vbd].getText('custrecord_ci_adv_createdby') == currentUser.name) { isCreatorCurrentUser = true; }
+						let modifiedDate;
+						//	if (VBDSearch[vbd].getText('custrecord_ci_adv_createdby') == currentUser.name) { isCreatorCurrentUser = true; }
+						if(modified === false && modified === 'F'){modifiedDate = '';}else{modifiedDate = VBDSearch[vbd].getValue('lastmodified');}
 						VBDlist.push({
 							requestedBy: VBDSearch[vbd].getText('custrecord_ci_adv_createdby'),
 							requestedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_creator_role'),
 							vendorname: VBDSearch[vbd].getText('custrecordci_adv_details'),
 							createdAt: VBDSearch[vbd].getValue('created'),
-							//modified: modified,
-							// modifiedBy: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by'),
-							// modifiedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by_role'),
+							modified: modified,
+							modifiedBy: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by'),
+							modifiedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by_role'),
+							lastModified: modifiedDate,
 							oldValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_old_values')),
 							newValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_edited_values')),
 							actionedAt: VBDSearch[vbd].getValue('lastmodified'),
 							actionedBy: VBDSearch[vbd].getText('lastmodifiedby'),
+							status: VBDSearch[vbd].getText('custrecord_ci_adv_approval_status'),
 							rejectedReason: VBDSearch[vbd].getValue('custrecord_ci_adv_reject_reason'),
-							//VBDId: VBDSearch[vbd].id,
+							VBDId: VBDSearch[vbd].id,
 							//isCreatorCurrentUser: isCreatorCurrentUser,
 
 						});
@@ -186,7 +193,7 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 							if (Object.prototype.hasOwnProperty.call(item, 'oldValue')) {
 								item.newValue = item.oldValue;
 								delete item.oldValue;
-								log.audit('Renamed oldValue to newValue for create record', item);
+								log.audit('Renamed oldValue t	o newValue for create record', item);
 							}
 						} */
 						log.debug('VBDlist after processing create record', JSON.stringify(VBDlist));
@@ -208,7 +215,7 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 		/**
 		 * Retrieves the clean JSON object
 		 * @param {JSON} jsonValue
-		 * @returns {JSON} s
+		 * @returns {JSON} 
 		 */
 		function cleanObject(jsonValue) {
 			if (!jsonValue) {
