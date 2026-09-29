@@ -137,21 +137,6 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 				// Convert each matching list row into the internal ID used by the search filter.
 				let approvalStatusId = queryResults.map((result) => result.id);
 				log.audit('approvalStatusId', approvalStatusId);
-			/* 	let currentUser = runtime.getCurrentUser();
-				let queryEntitle = `SELECT id FROM customlist_ci_entitlements WHERE name = 'Vendor Bank Details Approver'`;
-				//This is used to retrieve the internal id of the entitlement with the name 'Vendor Bank Details Approver' or 'Vendor Bank Details'
-				let queryEntitleId = query.runSuiteQL({ query: queryEntitle }).asMappedResults();
-				log.debug('queryEntitleId', queryEntitleId);
-				queryEntitleId = queryEntitleId.map((result) => result.id);
-				log.debug('queryEntitleId mapped', queryEntitleId);
-				let queryEntitledResults = [];
-				if (queryEntitleId.length > 0) {
-					queryEntitledResults = search.create({ type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId], 'AND', ['custrecord_ci_ent_mgr_user', 'anyof', currentUser.id], 'AND', ['custrecord_ci_ent_mgr_user_role', 'anyof', currentUser.role]] }).run().getRange({ start: 0, end: 1000 });
-					log.debug('queryEntitledResults', queryEntitledResults);
-				}
-				let isCurrentUserEntitled = false, isCreatorCurrentUser = false;
-				if (queryEntitledResults && queryEntitledResults.length > 0) isCurrentUserEntitled = true;
-				log.debug('isCurrentUserEntitled', isCurrentUserEntitled); */
 
 				// Searching the VBD details table by filterign the with specifc field called approval status.
 				let VBDSearch = search.create({type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]],columns: ['custrecordci_adv_details', 'custrecord_ci_old_values','custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', 'lastmodified','lastmodifiedby','custrecord_ci_adv_reject_reason','custrecord_ci_adv_approval_status']});
@@ -186,16 +171,6 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 							//isCreatorCurrentUser: isCreatorCurrentUser,
 
 						});
-						/* log.debug('modified', modified)
-						if (modified === false || modified === 'F') // For the Create Record only showing the new value by renaming the oldValue key to newValue.
-						{
-							let item = VBDlist[VBDlist.length - 1];
-							if (Object.prototype.hasOwnProperty.call(item, 'oldValue')) {
-								item.newValue = item.oldValue;
-								delete item.oldValue;
-								log.audit('Renamed oldValue t	o newValue for create record', item);
-							}
-						} */
 						log.debug('VBDlist after processing create record', JSON.stringify(VBDlist));
 					}
 				}
