@@ -99,15 +99,20 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
 					for (let vbd = 0; vbd < VBDSearch.length; vbd++) {
 						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified');
-						if (VBDSearch[vbd].getText('custrecord_ci_adv_createdby') == currentUser.name || VBDSearch[vbd].getText('custrecord_ci_adv_modified_by') == currentUser.name) 
+						let creator = VBDSearch[vbd].getText('custrecord_ci_adv_createdby');
+						let modifier = VBDSearch[vbd].getText('custrecord_ci_adv_modified_by');
+						if ( (modified == false && creator === currentUser.name) || (modified == true && modifier === currentUser.name && creator === currentUser.name) || (modified == true && modifier === currentUser.name) ) 
 						{ isCreatorCurrentUser = true; }else{isCreatorCurrentUser = false;}
+						// 1. modifeid = true and creator and modifier == currentuser - Disable Approve/Reject
+						// 2. modifeid = true and the modfier == currentuser - Disable Approve/Reject
+						// 3. modified = false and creator == currentuser - Disable Approve/Reject
 						VBDlist.push({
-							requestedBy: VBDSearch[vbd].getText('custrecord_ci_adv_createdby'),
+							requestedBy: creator,//VBDSearch[vbd].getText('custrecord_ci_adv_createdby'),
 							requestedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_creator_role'),
 							vendorname: VBDSearch[vbd].getText('custrecordci_adv_details'),
 							createdAt: VBDSearch[vbd].getValue('created'),
 							modified: modified,
-							modifiedBy: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by'),
+							modifiedBy: modifier,//VBDSearch[vbd].getText('custrecord_ci_adv_modified_by'),
 							modifiedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by_role'),
 							oldValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_old_values')),
 							newValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_edited_values')),
