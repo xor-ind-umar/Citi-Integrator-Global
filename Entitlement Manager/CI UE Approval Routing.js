@@ -20,7 +20,9 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		pendingApprovalName: 'Pending Approval',
 		createEntitlementName: 'Vendor Bank Details Approver',
 		editEntitlementName: 'Vendor Bank Details',
-		VBDrecordType : 'customrecord_ci_adv_entity_bank_details'
+		VBDrecordType: 'customrecord_ci_adv_entity_bank_details',
+		configRecordType: 'customrecord_ci_adv_general_config',
+		entitledCheck: 'custrecord_ci_adv_enable_entitle'
 	};
 
 	const isCreateOrEdit = (eventType) =>
@@ -193,7 +195,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			const fieldLabel = getFieldLabel(newRecord, fieldId);
 			const oldValue = oldRecord ? getFieldValue(oldRecord, fieldId) : '';
 			// Some generated input fields expose an inpt_ label even when their ID looks valid.
-			if (fieldLabel.indexOf('inpt_') === 0 || (!oldRecord && isFalseValue(newValue)) || (!oldRecord && isEmptyArray(newValue)) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' ) {
+			if (fieldLabel.indexOf('inpt_') === 0 || (!oldRecord && isFalseValue(newValue)) || (!oldRecord && isEmptyArray(newValue)) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' || fieldLabel === 'Last Modified At') {
 				return;
 			}
 
@@ -233,6 +235,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 				|| fieldLabel === 'Creator Role'
 				|| fieldLabel === 'Modified by'
 				|| fieldLabel === 'Modified'
+				|| fieldLabel === 'Last Modified At'
 				|| String(newValue) === String(oldValue)) {
 				return;
 			}
@@ -295,18 +298,21 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		});
 		const createdValues = collectValuesToStore(savedRecord, null);
 		let applist = getApproverList();
-		log.audit({title: 'Approver List',details: applist});
+		log.audit({ title: 'Approver List', details: applist });
+		savedRecord.setValue({ fieldId: 'customrecord_ci_adv_entity_bank_details', value: applist });
+		savedRecord.setValue({ fieldId: [CONFIG.createValuesFieldId], value: JSON.stringify(createdValues) });
+		const savedId = savedRecord.save();
+		log.audit({ title: 'Saved Record ID', details: savedId });
 		// Update only the creation JSON field with the display values from the saved record.
-		record.submitFields({
+		/* record.submitFields({
 			type: CONFIG.VBDrecordType,
 			id: recordId,
 			values: {
 				[CONFIG.createValuesFieldId]: JSON.stringify(createdValues),
-				'customrecord_ci_adv_entity_bank_details': applist
 			}
-		});
+		}); */
 	};
-	const getApproverList = () =>{
+	const getApproverList = () => {
 		let queryEntitle = `SELECT id FROM customlist_ci_entitlements WHERE name = 'Vendor Bank Details Approver'`;
 		//This is used to retrieve the internal id of the entitlement with the name 'Vendor Bank Details Approver' or 'Vendor Bank Details'
 		let queryEntitleId = query.runSuiteQL({ query: queryEntitle }).asMappedResults();
@@ -314,9 +320,9 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		queryEntitleId = queryEntitleId.map((result) => result.id);
 		log.audit('queryEntitleId mapped', queryEntitleId);
 
-		var entitlelist = search.create({type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId]], columns:["custrecord_ci_ent_mgr_user"]})
+		var entitlelist = search.create({ type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId]], columns: ["custrecord_ci_ent_mgr_user"] })
 
-		var searchResults = [],pagedData;
+		var searchResults = [], pagedData;
 		pagedData = entitlelist.runPaged({ pageSize: 1000 });
 		pagedData.pageRanges.forEach(function (pageRange) {
 			var page = pagedData.fetch({ index: pageRange.index });
@@ -327,6 +333,14 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		return searchResults;
 	};
 
+	const isFeatureInEffect = () => {
+		// Implement the logic to check if the Entitlement feature is enabled.
+		// Return true if the feature is enabled, false otherwise.
+		// This is a placeholder implementation and should be replaced with actual logic.
+		let queryResults = query.runSuiteQL({ query: `SELECT ${CONFIG.entitledCheck} FROM ${CONFIG.configRecordType}` }).asMappedResults();
+
+		return (queryResults && queryResults.length > 0 && queryResults[0][CONFIG.entitledCheck])
+	};
 	/**
 	 * Runs before an Entitlement Manager record is saved.
 	 * @param {Object} context
@@ -335,11 +349,8 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 	 * @param {Record} context.oldRecord
 	 */
 	const beforeSubmit = (context) => {
-		// Only create and edit events contain values that need to be recorded.
-		if (!isCreateOrEdit(context.type)) {
-			return;
-		}
-
+		// if the Entitlement feature is enabled should this logic run AND create and edit events contain values that need to be recorded.
+		if (isFeatureInEffect() == false || isFeatureInEffect() == null || isFeatureInEffect() == 'F' || !isCreateOrEdit(context.type)) { return; }
 		// The new record contains values being submitted by the user.
 		const newRecord = context.newRecord;
 		// The old record contains the previously saved values during edit events.
@@ -347,7 +358,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		// Read the user and role of the person performing the operation.
 		const currentUser = runtime.getCurrentUser();
 		//When the old record exists, it means the current operation is an edit.
-		if (oldRecord) { 
+		if (oldRecord) {
 			newRecord.setValue({
 				fieldId: 'custrecord_ci_adv_modified_by',
 				value: currentUser.id
@@ -362,18 +373,17 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			});
 		}
 		// When the old record does not exist, it means the current operation is a create.
-		else
-		{
+		else {
 			newRecord.setValue({
-					fieldId: 'custrecord_ci_adv_createdby',
-					// NetSuite list fields must be set with the list value ID.
-					value: currentUser.id
-				});
-				newRecord.setValue({
-					fieldId: 'custrecord_ci_adv_creator_role',
-					// NetSuite list fields must be set with the list value ID.
-					value: currentUser.role
-				});
+				fieldId: 'custrecord_ci_adv_createdby',
+				// NetSuite list fields must be set with the list value ID.
+				value: currentUser.id
+			});
+			newRecord.setValue({
+				fieldId: 'custrecord_ci_adv_creator_role',
+				// NetSuite list fields must be set with the list value ID.
+				value: currentUser.role
+			});
 		}
 		/* // Read the entitlement value entered on the record before checking authorization.
 		const inputValue = getFieldValue(newRecord, CONFIG.inputFieldId);
@@ -392,28 +402,28 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		); */
 
 		//if (!matchingRecords.length) 
-			// Do not create an audit payload when the user is not authorized for this entitlement.
-			/* log.audit({
-				title: 'User is not entitled for VBD operation',
-				details: { userId: currentUser.id, roleId: currentUser.role, inputValue, entitlementName }
-			}); */
-				// Set the approval status using the list entry's internal ID, not the label text.
-			// Resolve the Pending Approval list label to its internal ID.
-			const pendingApprovalId = getListValueId(CONFIG.approvalStatusListId, CONFIG.pendingApprovalName);
-			if (pendingApprovalId) {
-				// Set the status before the record is submitted.
-				newRecord.setValue({
-					fieldId: CONFIG.approvalStatusFieldId,
-					// NetSuite list fields must be set with the list value ID.
-					value: pendingApprovalId
-				});
-			} else {
-				// Log a configuration problem when the list value cannot be found.
-				log.error({
-					title: 'Pending Approval status not found',
-					details: CONFIG.pendingApprovalName
-				});
-			}
+		// Do not create an audit payload when the user is not authorized for this entitlement.
+		/* log.audit({
+			title: 'User is not entitled for VBD operation',
+			details: { userId: currentUser.id, roleId: currentUser.role, inputValue, entitlementName }
+		}); */
+		// Set the approval status using the list entry's internal ID, not the label text.
+		// Resolve the Pending Approval list label to its internal ID.
+		const pendingApprovalId = getListValueId(CONFIG.approvalStatusListId, CONFIG.pendingApprovalName);
+		if (pendingApprovalId) {
+			// Set the status before the record is submitted.
+			newRecord.setValue({
+				fieldId: CONFIG.approvalStatusFieldId,
+				// NetSuite list fields must be set with the list value ID.
+				value: pendingApprovalId
+			});
+		} else {
+			// Log a configuration problem when the list value cannot be found.
+			log.error({
+				title: 'Pending Approval status not found',
+				details: CONFIG.pendingApprovalName
+			});
+		}
 		// Step 3: collect only the values relevant to this create or edit.
 		const valuesToStore = collectValuesToStore(newRecord, oldRecord);
 		// Log the final payload for troubleshooting and approval processing.
@@ -434,10 +444,34 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 	 * @param {Record} context.oldRecord
 	 */
 	const afterSubmit = (context) => {
-		// Normalize list/record values after create because display text is available after save.
-		if (context.type === 'create' && context.newRecord.id) {
-			refreshCreatedValuesWithText(context.newRecord.id);
+		try {
+			// Exit early if the Entitlement feature is not in effect.
+			if (isFeatureInEffect() == false || isFeatureInEffect() == null || isFeatureInEffect() == 'F') { return; }
+			// Normalize list/record values after create because display text is available after save.
+			if (context.type === 'create' && context.newRecord.id) {
+				refreshCreatedValuesWithText(context.newRecord.id);
+			}
+			const newRecord = context.newRecord;
+			let vendorId = newRecord.getValue('custrecordci_adv_details');
+			let approvalStatus = newRecord.getValue('custrecord_ci_adv_approval_status');
+			let vendorRecordSavedId = record.submitFields({
+				type: 'vendor',
+				id: vendorId,
+				values: {
+					'custentity_ci_adv_as': approvalStatus
+				}
+			});
+			log.debug({
+				title: 'Vendor Record Saved',
+				details: 'Vendor Record ID: ' + vendorRecordSavedId
+			});
+		} catch (e) {
+			log.error({
+				title: 'Error updating vendor record',
+				details: e.message
+			});
 		}
+
 	};
 
 	// Expose the entry points NetSuite calls for this User Event script.
