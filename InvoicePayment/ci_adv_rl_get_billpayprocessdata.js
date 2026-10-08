@@ -58,7 +58,7 @@ define(['N/search', 'N/record', 'N/error', 'N/log', 'N/task', 'N/config', 'N/for
                 } else if (action == 'getUnPaidBillsBodyData') {
                     data = getBodyData(requestParams, search, log, url, config, format, runtime);
                 } else if (action == 'getUnPaidBillsSublistData') {
-                    data = getUnPaidBillsSublistData(requestParams, search, log, url, runtime, format, record, xml);
+                    data = getUnPaidBillsSublistData(requestParams, search, log, url, runtime, format, record, xml, query);
                 } else if (action == 'getPFIData') {
                     data = getPFIData(requestParams, search, log, url, runtime, search, record, task);
                 }
@@ -1227,14 +1227,14 @@ function getProcessedPaymentsSublistData(requestParams, search, log, config, url
     }
 }
 
-	const isFeatureInEffect = () => {
-		// Implement the logic to check if the Entitlement feature is enabled.
-		// Return true if the feature is enabled, false otherwise.
-		// This is a placeholder implementation and should be replaced with actual logic.
-		let queryResults = query.runSuiteQL({ query: `SELECT ${CONFIG.entitledCheck} FROM ${CONFIG.configRecordType}` }).asMappedResults();
-		
-		return (queryResults && queryResults.length > 0 && queryResults[0][CONFIG.entitledCheck])
-	};
+const isFeatureInEffect = () => {
+    // Implement the logic to check if the Entitlement feature is enabled.
+    // Return true if the feature is enabled, false otherwise.
+    // This is a placeholder implementation and should be replaced with actual logic.
+    let queryResults = query.runSuiteQL({ query: `SELECT ${CONFIG.entitledCheck} FROM ${CONFIG.configRecordType}` }).asMappedResults();
+
+    return (queryResults && queryResults.length > 0 && queryResults[0][CONFIG.entitledCheck])
+};
 
 
 // -------------------------------------------- getUnPaidBillsSublistData Function -------------------------------------------------
@@ -1444,7 +1444,7 @@ function getUnPaidBillsSublistData(requestParams, search, log, url, runtime, for
             name: 'custentity_ci_adv_as',
             join: 'vendor'
         })); // Umar has added on 5th October 2026.
-       
+
 
         var transactionSearch = search.create({ type: 'transaction', filters: searchFilters, columns: searchColumns });
         var transactionSearchResults = new Array();
@@ -1612,35 +1612,65 @@ function getUnPaidBillsSublistData(requestParams, search, log, url, runtime, for
             // check  WHT used for WHT Validation by RAG //  'custcol_4601_witaxapplies'
             var whtValidationObj = checkWHTValidation(vendorBillRecord, record, log, search);
             log.debug('WHT Validation Response : ', JSON.stringify(whtValidationObj));
+            if (whtValidationObj != null) {
+                if (whtValidationObj.whtFlag) {
+                    log.debug('whtValidationObj.whtValidAlert', whtValidationObj.whtValidAlert);
+                    var errors = whtValidationObj.whtValidAlert.split('\n');
+                    var xArray = [];
 
-            if(whtValidationObj.whtFlag)
-            {
-                log.debug('whtValidationObj.whtValidAlert', whtValidationObj.whtValidAlert);
-                var errors = whtValidationObj.whtValidAlert.split('\n');
-                var xArray = [];
-
-                log.debug('stdValidData.stdFlag', stdValidData.stdFlag );
-                // add wht errors 
-                 if(stdValidData.stdFlag) 
-                {
-                 xArray = stdValidData.stdValidAlert;
-                 }else{ // no std errors found but wht found so update stdValidData with wht errors
-                    xArray.push('Please review the following fields before proceeding:');
-                    stdValidData.stdFlag = true;
-                }
-                // now update stdValidData with wht errors
-                 for (var i = 0; i < errors.length; i++) {
-                    if (errors[i] && errors[i].trim() != '') {
-                        xArray.push(errors[i]);
+                    log.debug('stdValidData.stdFlag', stdValidData.stdFlag);
+                    // add wht errors 
+                    if (stdValidData.stdFlag) {
+                        xArray = stdValidData.stdValidAlert;
+                    } else { // no std errors found but wht found so update stdValidData with wht errors
+                        xArray.push('Please review the following fields before proceeding:');
+                        stdValidData.stdFlag = true;
                     }
-                }
-                stdValidData.stdValidAlert = xArray;
-            }// update stdvalidData only if wht errors found
+                    // now update stdValidData with wht errors
+                    for (var i = 0; i < errors.length; i++) {
+                        if (errors[i] && errors[i].trim() != '') {
+                            xArray.push(errors[i]);
+                        }
+                    }
+                    stdValidData.stdValidAlert = xArray;
+                }// update stdvalidData only if wht errors found
+            } // if returned object is not null then only check for wht errors
 
             //...end
 
             log.debug("stdValidData 1504 WHT Validation added : ", stdValidData);
+            // check IL 574 Validation by RAG 9_30
+            // check  WHT used for WHT Validation by RAG //  'custcol_4601_witaxapplies'
+            var il574ValidationObj = checkIL574Validation(vendorBillRecord, record, log, search);
+            log.debug('IL 574 Validation Response : ', JSON.stringify(il574ValidationObj));
 
+            if (il574ValidationObj != null) {
+                if (il574ValidationObj.ILFlag) {
+                    log.debug('il574ValidationObj.ILValidAlert', il574ValidationObj.ILValidAlert);
+                    var errors = il574ValidationObj.ILValidAlert.split('\n');
+                    var xArray = [];
+
+                    log.debug('stdValidData.stdFlag', stdValidData.stdFlag);
+                    // add IL 574 errors 
+                    if (stdValidData.stdFlag) {
+                        xArray = stdValidData.stdValidAlert;
+                    } else { // no std errors found but IL 574 found so update stdValidData with IL 574 errors
+                        xArray.push('Please review the following fields before proceeding:');
+                        stdValidData.stdFlag = true;
+                    }
+                    // now update stdValidData with IL 574 errors
+                    for (var i = 0; i < errors.length; i++) {
+                        if (errors[i] && errors[i].trim() != '') {
+                            xArray.push(errors[i]);
+                        }
+                    }
+                    stdValidData.stdValidAlert = xArray;
+                    log.debug("stdValidData 1653 IL 574 Validation added : ", stdValidData);
+
+                }// update stdvalidData only if IL 574 errors found
+            } // if returned object is not null then only check for IL 574 errors
+
+            //...end
             // end of std validation check by rag
             var paymentProfileNames = []; // new variable to store all profiles
             var paymentProfileList = [];
@@ -1816,6 +1846,33 @@ function getUnPaidBillsSublistData(requestParams, search, log, url, runtime, for
                     inActive = '';
                     finalUrl = '';
                 }
+               //JP391 and JP410 1_10 decimal validation check by rag
+                var isJP391 = paymentProfileName.indexOf('391') !== -1 && paymentProfileName.indexOf('JP') !== -1;
+                var isJP410 = paymentProfileName.indexOf('410') !== -1 && paymentProfileName.indexOf('JP') !== -1;
+                // add log for stdValidData
+                log.debug("DECIMAL VALIDATION : stdValidData before  : ", stdValidData);
+                if(isJP391 || isJP410){
+                   var tempAmt = discountValid ? (parseFloat(paymentAmount) - parseFloat(totalDiscount)) : parseFloat(paymentAmount);
+                    var decimalCheck = (tempAmt !== null && tempAmt !== undefined)
+                        ? tempAmt.toString().split('.')
+                        : [];
+
+                    if (decimalCheck.length > 1) {
+                        var xArray = [];
+                        var fraction = decimalCheck[1] || '';
+                        if (parseInt(fraction, 10) > 0) {
+                            xArray = stdValidData.stdValidAlert;
+                            if (!stdValidData.stdFlag) { // no exiting errors
+                                stdValidData.stdFlag = true;
+                                xArray.push('Please review the following fields before proceeding:');
+                                xArray.push('Payment Amount: Decimal values are not allowed for the selected payment profile');
+                            } else{
+                                 xArray.push('Payment Amount: Decimal values are not allowed for the selected payment profile');
+                            }
+                        }
+                    }
+                }// end decimal validation check
+                log.debug("DECIMAL VALIDATION : stdValidData after : ", stdValidData);
 
                 sublistData.push({
                     id: loop1,
@@ -1870,7 +1927,7 @@ function getUnPaidBillsSublistData(requestParams, search, log, url, runtime, for
                     profileLink: profileLink,
                     stdFlag: stdValidData.stdFlag,
                     stdValidAlert: stdValidData.stdValidAlert,
-                    approvalStatus: approvalStatus
+                    approvalStatus: approvalStatus // Umar has Updated on 5th Oct 2026
                 });
 
             }
@@ -1920,7 +1977,7 @@ function getUnPaidBillsSublistData(requestParams, search, log, url, runtime, for
             'sublistData': sublistData,
             'finalamountData': resultArray,
             'totalCount': totalTransactionCount,
-            'isFeatureInEffect': isFeatureInEffect() // Umar has Updated on 5th Oct 2026
+            'isFeatureInEffect': isFeatureInEffect(query) // Umar has Updated on 5th Oct 2026
         };
         log.debug(logTitle, 'finalSublistData - ' + JSON.stringify(finalSublistData));
         log.debug({ title: 'getSublistData', details: 'End' });
@@ -1950,7 +2007,14 @@ function getUnPaidBillsSublistData(requestParams, search, log, url, runtime, for
         }); */
     }
 }
+      function isFeatureInEffect(query) {
+		// Implement the logic to check if the Entitlement feature is enabled.
+		// Return true if the feature is enabled, false otherwise.
+		// This is a placeholder implementation and should be replaced with actual logic.
+		var queryResults = query.runSuiteQL({ query: 'SELECT custrecord_ci_adv_enable_entitle FROM customrecord_ci_adv_general_config' }).asMappedResults();
 
+		return (queryResults && queryResults.length > 0 && queryResults[0]['custrecord_ci_adv_enable_entitle'])
+	};
 function checkWHTValidation(vendorBillRecord, record, log, search) {
     try {
         var errorList = '';
@@ -2061,7 +2125,7 @@ function checkWHTValidation(vendorBillRecord, record, log, search) {
             var expenseLineCount = rec.getLineCount({ sublistId: 'expense' });
             log.debug('Item Line Count:', itemLineCount);
             log.debug('Expense Line Count:', expenseLineCount);
-            var itemTaxCodesSet ='';// new Set();
+            var itemTaxCodesSet = '';// new Set();
             var expTaxCodesSet = ''; //new Set();
             var multiFlag = false;
 
@@ -2070,8 +2134,8 @@ function checkWHTValidation(vendorBillRecord, record, log, search) {
                 log.debug('Item Line ' + i + ' Tax Code:', taxCode);
                 if (taxCode && itemTaxCodesSet.indexOf(taxCode) === -1) {
                     //add comma only if the string is not empty to separate multiple tax codes
-                    if(itemTaxCodesSet !== '')
-                        itemTaxCodesSet += ','  + taxCode;
+                    if (itemTaxCodesSet !== '')
+                        itemTaxCodesSet += ',' + taxCode;
                     else
                         itemTaxCodesSet += taxCode;
                 }
@@ -2081,10 +2145,10 @@ function checkWHTValidation(vendorBillRecord, record, log, search) {
                 var taxCode = rec.getSublistValue({ sublistId: 'expense', fieldId: 'custcol_4601_witaxcode', line: j });
                 log.debug('Expense Line ' + j + ' Tax Code:', taxCode);
 
-                 if (taxCode && expTaxCodesSet.indexOf(taxCode) === -1) {
+                if (taxCode && expTaxCodesSet.indexOf(taxCode) === -1) {
                     //add comma only if the string is not empty to separate multiple tax codes
-                    if(expTaxCodesSet !== '')
-                        expTaxCodesSet += ','  + taxCode;
+                    if (expTaxCodesSet !== '')
+                        expTaxCodesSet += ',' + taxCode;
                     else
                         expTaxCodesSet += taxCode;
                 }
@@ -2105,13 +2169,13 @@ function checkWHTValidation(vendorBillRecord, record, log, search) {
             // WHT validation - multiple tax codes end
 
         } // WHT mandatory fields validation end
-         else if(currentSubsidiaryCountry === 'TH' && hasMatchingCustomRecord && whtCount <= 0) {
-             var payorCodeValue = rec.getValue({ fieldId: 'custbody_ci_adv_wht_payor_code' });
-                var taxFormValue = rec.getValue({ fieldId: 'custbody_ci_adv_tax_form' });
-                var whtFormDetailsValue = rec.getValue({ fieldId: 'custbody_ci_adv_wht_form_details' });
+        else if (currentSubsidiaryCountry === 'TH' && hasMatchingCustomRecord && whtCount <= 0) {
+            var payorCodeValue = rec.getValue({ fieldId: 'custbody_ci_adv_wht_payor_code' });
+            var taxFormValue = rec.getValue({ fieldId: 'custbody_ci_adv_tax_form' });
+            var whtFormDetailsValue = rec.getValue({ fieldId: 'custbody_ci_adv_wht_form_details' });
 
-                if (payorCodeValue || taxFormValue || whtFormDetailsValue)
-                    errorList += 'Please remove data from WHT Tax fields under \'CI WHT Details\' tab: WHT Payor Code, WHT Tax Form, WHT Form Details';
+            if (payorCodeValue || taxFormValue || whtFormDetailsValue)
+                errorList += 'Please remove data from WHT Tax fields under \'CI WHT Details\' tab: WHT Payor Code, WHT Tax Form, WHT Form Details';
         }
         if (errorList !== '') {
             return {
@@ -2126,6 +2190,181 @@ function checkWHTValidation(vendorBillRecord, record, log, search) {
 
     } catch (e) {
         log.debug("Error in checkWHTValidation function: ", e);
+        return null;
+    }
+}
+
+function checkIL574Validation(vendorBillRecord, record, log, search) {
+    try {
+        var errorList = '';
+        var BOIData = new Object();
+        var rec = vendorBillRecord;
+        log.debug('checkIL574Validation || Start || Vendor Bill Record ID', JSON.stringify(rec));
+        var currentSubsidiaryId = rec.getValue({ fieldId: 'subsidiary' });
+        var currentSubsidiaryCountry = '';
+
+        if (currentSubsidiaryId) {
+            var subsidiaryData = search.lookupFields({
+                type: search.Type.SUBSIDIARY,
+                id: currentSubsidiaryId,
+                columns: ['country']
+            });
+            currentSubsidiaryCountry = subsidiaryData.country[0].value || '';
+        }
+        log.debug('Current Subsidiary Country', currentSubsidiaryCountry);
+        if (currentSubsidiaryCountry !== 'IL')
+            return null;
+
+        var vendorId = rec.getValue({ fieldId: 'entity' });
+        var hasMatchingCustomRecord = false;
+
+        if (vendorId) {
+            customRecSearch = search.create({
+                type: 'customrecord_ci_adv_entity_bank_details', // replace with your custom record type
+                filters: [
+                    ["formulatext: {custrecord_ci_adv_profile_name}", "contains", "IL"],
+                    "AND",
+                    ["formulatext: {custrecord_ci_adv_profile_name}", "contains", "574"],
+                    "AND",
+                    ["custrecordci_adv_details", "anyof", vendorId],
+                    "AND",
+                    ["isinactive", "is", "F"],
+                    "AND",
+                    ["custrecord_ci_adv_primary_account", "is", "T"]
+                ],
+                columns: [
+                    search.createColumn({ name: "custrecord_ci_adv_boi_codes", label: "BOI Codes" }),
+                    search.createColumn({
+                        name: "custrecord_ci_adv_boi_category",
+                        join: "CUSTRECORD_CI_ADV_BOI_CODES",
+                        label: "Category"
+                    })
+                ]
+            });
+            resultCount = customRecSearch.runPaged({ pageSize: 1 }).count;
+            if (resultCount > 0) {
+                var results = customRecSearch.run().getRange({
+                    start: 0,
+                    end: 1
+                });
+
+                if (results.length > 0) {
+                    BOIData.BoiCode = results[0].getValue({
+                        name: 'custrecord_ci_adv_boi_codes'
+                    });
+                    BOIData.group = results[0].getValue({
+                        name: 'custrecord_ci_adv_boi_category',
+                        join: 'CUSTRECORD_CI_ADV_BOI_CODES'
+                    });
+                }
+            }
+            hasMatchingCustomRecord = resultCount > 0;
+            log.debug('IL :: Vendor Custom Record Result Count', 'Result Count: ' + resultCount);
+        }
+        if (!hasMatchingCustomRecord)
+            return null;
+        // need to add search because unable to retrieve WHT amt using record.load
+        var whtTaxAmount;
+        const vendorbillSearchObj = search.create({
+            type: "vendorbill",
+            settings: [{ "name": "consolidationtype", "value": "ACCTTYPE" }],
+            filters:
+                [
+                    ["type", "anyof", "VendBill"],
+                    "AND",
+                    ["mainline", "is", "F"],
+                    "AND",
+                    ["custcol_4601_witaxapplies", "is", "T"],
+                    "AND",
+                    ["internalid", "anyof", rec.id]
+                ],
+            columns:
+                [
+                    search.createColumn({
+                        name: "custcol_4601_witaxamount",
+                        summary: "SUM",
+                        label: "Withholding Tax Amount"
+                    }),
+                    search.createColumn({
+                        name: "internalid",
+                        summary: "GROUP",
+                        label: "Internal ID"
+                    })
+                ]
+        });
+        const billResultCount = vendorbillSearchObj.runPaged().count;
+        log.debug("WHT tax Total found:: ", billResultCount);
+        const billResults = vendorbillSearchObj.run().getRange({
+            start: 0,
+            end: 1
+        });
+        if (billResults.length > 0) {
+            whtTaxAmount = billResults[0].getValue({
+                name: 'custcol_4601_witaxamount',
+                summary: "SUM"
+            });
+            log.debug('Total WHT Amount', whtTaxAmount);
+        }
+        log.debug('Vendor Custom Record Check :: vendorId', vendorId + ' ' + 'currentSubsidiaryCountry: ' + currentSubsidiaryCountry + ' ' + 'hasMatchingCustomRecord: ' + hasMatchingCustomRecord + ' ' + 'whtTaxAmount: ' + whtTaxAmount);
+        if(whtTaxAmount == null || whtTaxAmount == undefined)
+            whtTaxAmount = 0;
+
+        // check condition for WHT validation
+        if (currentSubsidiaryCountry === 'IL' && hasMatchingCustomRecord) {
+
+            log.debug('IL574 validation: ', ' BOIData: ' + JSON.stringify(BOIData));
+            // get tax amount value
+            var taxAmount = rec.getValue({ fieldId: 'taxtotal' });
+            log.debug('IL574 validation: ', ' taxAmount: ' + taxAmount);
+            // convert both whtTaxAmount and taxAmount to positive numbers for comparison
+            whtTaxAmount = Math.abs(parseFloat(whtTaxAmount));
+            taxAmount = Math.abs(parseFloat(taxAmount));
+             log.debug('IL574 validation: ', ' whtTaxAmount: ' + whtTaxAmount + ' type: ' + typeof whtTaxAmount + ' taxAmount: ' + taxAmount + ' type: ' + typeof taxAmount);
+
+
+            var totalTax = whtTaxAmount + taxAmount;
+            log.debug('totalTax INcl WHT: ', ' totalTax: ' + totalTax + ' type: ' + typeof totalTax);
+
+            if (BOIData.group === 'Group1') {
+                if (totalTax > 0)
+                    errorList += 'Vendor Bill> Tax Amt: Tax amount should be 0\n';
+            } else  // Group2
+            {
+                // get Tax declaration code
+                var taxDeclCodeId = rec.getValue({ fieldId: 'custbody_ci_adv_tax_declaration_code' });
+                if (!taxDeclCodeId) {
+                    errorList += 'Vendor Bill> CI Batch Details> Tax Declaration Code: Please select Tax declaration code\n';
+                    //var taxField = rec.getField('custbody_ci_adv_tax_declaration_code');
+                    //taxField.isMandatory = true;
+                } else {// taxdeccode set
+                    var data = search.lookupFields({
+                        type: 'customrecord_ci_adv_tax_dec_cd_lt',
+                        id: taxDeclCodeId,
+                        columns: ['custrecord_ci_adv_tax_codes']
+                    });
+
+                    var taxDeclCode = Number(data.custrecord_ci_adv_tax_codes);
+                    log.debug('taxDeclCode ', taxDeclCode + ' type: ' + typeof taxDeclCode);
+                    if ((taxDeclCode) != 0 && (totalTax == 0))
+                        errorList += 'Vendor Bill> Tax Amt: Tax amount can not be 0\n';
+                }
+            }
+
+        } // IL574 validation end
+
+        if (errorList !== '') {
+            return {
+                ILFlag: true,
+                ILValidAlert: errorList
+            };
+        }
+        return {
+            ILFlag: false,
+            ILValidAlert: []
+        };
+
+    } catch (e) {
+        log.debug("Error in checkIL574Validation function: ", e);
         return null;
     }
 }
