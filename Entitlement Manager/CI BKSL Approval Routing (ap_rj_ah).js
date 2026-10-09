@@ -170,7 +170,17 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 							//isCreatorCurrentUser: isCreatorCurrentUser,
 
 						});
-						log.debug('VBDlist after processing create record', JSON.stringify(VBDlist));
+						log.audit('modified', modified)
+						if (modified === false || modified === 'F') // For the Create Record only showing the new value by renaming the oldValue key to newValue.
+						{
+							let item = VBDlist[VBDlist.length - 1];
+							if (Object.prototype.hasOwnProperty.call(item, 'oldValue')) {
+								item.newValue = item.oldValue;
+								delete item.oldValue;
+								log.audit('Renamed oldValue to newValue for create record', item);
+							}
+						}
+						log.audit('VBDlist after processing create record', JSON.stringify(VBDlist));
 					}
 				}
 				var bodyVal =  {'approvalHistory': VBDlist};
