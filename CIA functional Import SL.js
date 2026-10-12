@@ -18,7 +18,7 @@
  *
  */
 define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redirect', 'N/format', 'N/xml', 'N/query'],
-    function (serverWidget, search, file, record, url, redirect, format, xml, query) {
+     function (serverWidget, search, file, record, url, redirect, format, xml, query) {
         var getFieldIdMapped = getFieldsMapping();
         var arrcountry = createArrayCountry();
         var PAGE_SIZE = 25;
@@ -237,6 +237,7 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                 var suppAcctNo = paramObj.custpage_supplier_account_number;
                 var paymentReasonName = paramObj.custpage_payment_reason_name;
                 var bankInstruction1 = paramObj.custpage_bank_instruction_1;
+                var beneficiaryAccountType = paramObj.custpage_ci_adv_ben_acct_type;
 
 
 
@@ -283,7 +284,8 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                 var isTH424 = ((profileText.indexOf('424') !== -1) && (profileText.indexOf('TH') !== -1)); //Umar has added on 23rd July 26
                 var isAU980 = ((profileText.indexOf('980') !== -1) && (profileText.indexOf('AU') !== -1));
                 var isKR392 = ((profileText.indexOf('392') !== -1) && (profileText.indexOf('KR') !== -1)); //Umar has added on 19th Aug 26
-                log.debug("isKR392", isKR392)
+                var isIL574 = ((profileText.indexOf('574') !== -1) && (profileText.indexOf('IL') !== -1));
+
                 var is499 = ((profileText.indexOf('499') !== -1));
 
                 // check if already exists
@@ -407,7 +409,12 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                     vbdRecord.setValue('custrecord_ci_adv_email3', '');
                     vbdRecord.setValue('custrecord_ci_adv_email4', '');
                 }
-
+                if (beneficiaryAccountType) {
+                    vbdRecord.setValue({
+                        fieldId: 'custrecord_ci_adv_ben_acct_type',
+                        value: beneficiaryAccountType
+                    });
+                }
                 if (nidnNum) vbdRecord.setValue('custrecord_ci_adv_nidn_num', nidnNum)
                 else
                     vbdRecord.setValue('custrecord_ci_adv_nidn_num', '')
@@ -449,7 +456,7 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                         vbdRecord.setValue('custrecord_ci_adv_branch_number', '');
                         vbdRecord.setValue('custrecord_ci_adv_bank_bic', bankInstructionCode || '');
                         //if 821 || 392 - reset acct no set IBAN
-                        if (is821 || is392 && !isKR392) {
+                        if (is821 || is392 && !isKR392 || isIL574) {
                             vbdRecord.setValue('custrecord_ci_adv_account_number', '');
                             vbdRecord.setValue('custrecord_ci_adv_vbd_bank_iban', bankIban || '');
                         } else if (isCA603 || isCA604 || isCA780 || isUS500 || isGB962 || isNO116 || isGB158 || isGB393 || isPL574 || isNOR599 || isSG988 || isSG989 || is499 || isSG421 || isSG422 || isAU391 || isAU393 || isAU392 || isTH391 || isTH424 || isKR392) { // added is499 - bug - ganesh 07/03/2026
@@ -471,7 +478,9 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                     vbdRecord.setValue('custrecord_ci_adv_branch_number', bankBranchNumber || '');
                     vbdRecord.setValue('custrecord_ci_adv_vbd_bank_iban', bankIban || '');
                 }
-                if (isPL555)
+
+                log.debug("isIL574", isIL574 + ' bank iban: ' + bankIban)
+                if (isPL555 || isIL574)
                     vbdRecord.setValue('custrecord_ci_adv_vbd_bank_iban', bankIban || '');
                 //var whtChk = (isWhtChk == "T") ? true : false;
                 vbdRecord.setValue('custrecord_ci_adv_wht_check', (isWhtChk == "T") ? true : false);
@@ -591,6 +600,7 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                 sublist.addField({ id: 'branchno', type: serverWidget.FieldType.TEXTAREA, label: 'Bank Branch Number' });
                 sublist.addField({ id: 'bic', type: serverWidget.FieldType.TEXTAREA, label: 'Bank Instruction Code (BIC)' });
                 sublist.addField({ id: 'iban', type: serverWidget.FieldType.TEXTAREA, label: 'IBAN' });
+                sublist.addField({ id: 'approval_status', type: serverWidget.FieldType.TEXT, label: 'Approval Status' });//Umar has added on 25th Sept 2026
 
                 //sublist.addField({ id: 'city', type: serverWidget.FieldType.TEXTAREA, label: 'City' });
                 //sublist.addField({ id: 'recid', type: serverWidget.FieldType.TEXT, label: 'VBD Record Id' });
@@ -638,6 +648,7 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                         var recId = results[i].getValue('internalid');
                         var vendorId = results[i].getValue('custrecordci_adv_details');
                         var profileValue = results[i].getValue('custrecord_ci_adv_profile_name');
+                        var approvalStatus = results[i].getText('custrecord_ci_adv_approval_status'); //Umar has added on 25th September 2026
 
                         // Resolve Suitelet URL once
                         var editURLString = url.resolveScript({
@@ -669,7 +680,23 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                         // Set the sublist value
 
                         // Action
-                        if (actionHtml) {
+                        // Start -- Umar has added the condition to only show the action links if the approval status is not 'Pending Approval' on 25th Sept 2026
+                        //log.debug('Approval Status', approvalStatus);
+                        if (approvalStatus && approvalStatus.trim() == 'Pending Approval' && (isFeatureInEffect() == true || isFeatureInEffect() == 'T')) {
+                            sublist.setSublistValue({
+                                id: 'approval_status',
+                                line: i,
+                                value: approvalStatus
+                            });
+                            var message = 'This record is currently pending approval'
+                            var currentUser = runtime.getCurrentUser();
+                            //If the current user is not entitled to edit the vendor bank details.
+                            if (isCurrentUserEntitledToEdit(currentUser) == false || isCurrentUserEntitledToEdit(currentUser) == 'F') { message = 'You are not entitled to edit this record'; }
+                            actionHtml =
+                                '<span title="' + message + '" style="color:#777; cursor:not-allowed; text-decoration:none;">Edit</span> | ' +
+                                '<span title="' + message + '" style="color:#777; cursor:not-allowed; text-decoration:none;">Delete</span>';
+                        }
+                        // End -- Umar has added the condition to only show the action links if the approval status is not 'Pending Approval' on 25th Sept 2026
                             sublist.setSublistValue({
                                 id: 'action_value',
                                 line: i,
@@ -869,7 +896,6 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                             });
                         }
                     }
-                }// if got results
                 context.response.writePage(form);
             } catch (e) {
                 log.error('Error in loading home page', e);
@@ -903,11 +929,44 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                     'custrecord_ci_adv_form_code1',
                     'custrecord_ci_adv_return_addr_logo1',
                     'custrecord_ci_adv_cheque_number',
-                    'custrecord_ci_adv_vbd_bank_iban'
+                    'custrecord_ci_adv_vbd_bank_iban',
+                    'custrecord_ci_adv_approval_status'
                 ]
             });
             return bankSearch.runPaged({ pageSize: PAGE_SIZE });
         }
+
+        function isFeatureInEffect() {
+            // Implement the logic to check if the Entitlement feature is enabled.
+            // Return true if the feature is enabled, false otherwise.
+            var queryResults = query.runSuiteQL({ query: 'SELECT custrecord_ci_adv_enable_entitle FROM customrecord_ci_adv_general_config' }).asMappedResults();
+
+            return (queryResults && queryResults.length > 0 && queryResults[0]['custrecord_ci_adv_enable_entitle'])
+        };
+
+        function isCurrentUserEntitledToEdit() {
+            var entitlementResults = query.runSuiteQL({
+                query: "SELECT id FROM customlist_ci_entitlements WHERE name = ?",
+                params: ['Vendor Bank Details']
+            }).asMappedResults();
+            var entitlementIds = entitlementResults.map(function (result) {
+                return result.id;
+            });
+
+            const isCurrentUserEntitled = entitlementIds.length > 0 && search.create({
+                type: 'customrecord_ci_entitlement_manager',
+                filters: [
+                    ['custrecord_ci_ent_mgr_user_permissions', 'anyof', entitlementIds], 'AND',
+                    ['custrecord_ci_ent_mgr_user', 'anyof', currentUser.id], 'AND',
+                    ['custrecord_ci_ent_mgr_user_role', 'anyof', currentUser.role]
+                ]
+            }).run().getRange({ start: 0, end: 1 }).length > 0;
+
+            log.audit('isCurrentUserEntitled', isCurrentUserEntitled);
+            return isCurrentUserEntitled;
+        }
+
+
 
         /**
          * Attempts to resolve the internal ID of a saved CSV import map by name.
@@ -1056,29 +1115,78 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                     //inpt_custpage_profile_2
                 ProfileDropDownField.addSelectOption({ value: '', text: '--Select--' });
                 // Populate Vendor Dropdown and profile dropdown list
-                search.create({
+
+                //rutuja changed to handle more record above 4000 Client-HIAS issue
+                var vendorSearch = search.create({
                     type: search.Type.VENDOR,
                     filters: [['isinactive', 'is', 'F']],
                     columns: ['entityid', 'isperson', 'firstname', 'lastname', 'companyname']
-                }).run().each(function (result) {
-                    var name = '', entityID = result.getValue('entityid');
-                    var isPerson = result.getValue('isperson'), companyName = result.getValue('companyname');
-                    var firstName = result.getValue('firstname'), lastName = result.getValue('lastname');
-                    // Getting the Vendor Name.
-                    if (isPerson == true) { name = firstName + ' ' + lastName; } else { name = companyName; }
-                    if (isEmpty(name)) { name = entityID; }
+                });
+
+                // Fetch results in pages of 1,000 to avoid limits and handle massive datasets
+                var pagedData = vendorSearch.runPaged({ pageSize: 1000 });
+
+                pagedData.pageRanges.forEach(function (pageRange) {
+                    var page = pagedData.fetch({ index: pageRange.index });
+
+                    page.data.forEach(function (result) {
+                        var entityID = result.getValue('entityid');
+                        var isPerson = result.getValue('isperson');
+                        var companyName = result.getValue('companyname');
+                        var firstName = result.getValue('firstname');
+                        var lastName = result.getValue('lastname');
+
+                        // Robust check for boolean or string representation of 'isperson'
+                        var name = '';
+                        if (isPerson === true || isPerson === 'T') {
+                            name = (firstName || '') + ' ' + (lastName || '');
+                        } else {
+                            name = companyName;
+                        }
+
+                        if (!name || name.trim() === '') {
+                            name = entityID;
+                        }
+
                     vendorDropDownField.addSelectOption({
                         value: result.id,
                         text: name
                     });
-                    return true;
                 });
+                });
+                //rutuja changed to handle more record above 4000 Client-HIAS issue
+
 
                 //Rutuja 11th Sep changes made for fetching profiles according to  vendor country
                 var primarySubsidiaryId = '';
                 var subsidiaryCountry = '';
 
-                if (vendorIdvalue) {
+                //Rutuja 8th Oct changes made for fetching the checkbox values configuration
+                var configRecSearch = search.create({
+                    type: 'customrecord_ci_adv_general_config',
+                    filters: [
+                        ['isinactive', 'anyof', 'F']
+                    ],
+                    columns: [
+                        search.createColumn({ name: 'custrecord_ci_adv_ppf_filter_check' })
+                    ]
+                });
+
+                var ppfFilterCheck = false;
+                var searchResults = configRecSearch.run().getRange({
+                    start: 0,
+                    end: 1
+                });
+
+                if (searchResults && searchResults.length > 0) {
+                    var rawValue = searchResults[0].getValue({ name: 'custrecord_ci_adv_ppf_filter_check' });
+                    ppfFilterCheck = (rawValue === true || rawValue === 'T');
+                }
+                //Rutuja 8th Oct changes made for fetching the checkbox values configuration
+
+
+                if (vendorIdvalue && ppfFilterCheck) {         //Rutuja 8th Oct added ppfFilterCheck
+
                     // 1. Look up the primary subsidiary on the vendor record
                     var vendorData = search.lookupFields({
                         type: search.Type.VENDOR,
@@ -1346,6 +1454,7 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                 var instrVal = vbdRecordData["BANK INSTRUCTION CODE"];
                 var routingId = vbdRecordData["ROUTING IDENTIFIER"];
 
+
                 var hasBranch = (branchVal !== null && branchVal !== undefined && branchVal !== '');
                 var hasInstr = (instrVal !== null && instrVal !== undefined && instrVal !== '');
                 log.debug('hasBranch', hasBranch + ' hasInstr : ' + hasInstr);
@@ -1516,7 +1625,8 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                     "SUPPLIER ACCOUNT NUMBER": vbdSearch.getValue('custrecord_ci_adv_supp_acct_number'),
                     "PAYMENT REASON NAME": vbdSearch.getValue('custrecord_ci_adv_payment_reason_name'),
                     "BANK INSTRUCTION 1": vbdSearch.getValue('custrecord_ci_adv_bank_inst1'),
-
+                    "BENEFICIARY ACCOUNT TYPE": vbdSearch.getValue('custrecord_ci_adv_ben_acct_type'),
+                    "BOI CODES": vbdSearch.getValue('custrecord_ci_adv_boi_codes')
                 };
                 return vbdRecordData;
             } catch (e) {
@@ -1540,6 +1650,16 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                 });
                 primaryAccountCheck.defaultValue = 'T';
                 // primaryAccountCheck.defaultValue = 'Yes';
+
+                log.debug(
+                    'BENEFICIARY DEBUG - mandatoryFields',
+                    JSON.stringify(mandatoryFields)
+                );
+
+                log.debug(
+                    'BENEFICIARY DEBUG - mapping',
+                    JSON.stringify(getFieldIdMapped)
+                );
 
                 for (var k = 0; k < mandatoryFields.length; k++) {
                     var fieldName = mandatoryFields[k].fieldName;
@@ -1798,6 +1918,45 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                                 return true;
                             });
                             log.debug('added Payment details field')
+                        } else if (fieldName == "BENEFICIARY ACCOUNT TYPE") {
+                            newField.addSelectOption({
+                                value: '',
+                                text: '--Select--'
+                            });
+
+                            var beneficiaryAccountTypeList = search.create({
+                                type: 'customrecord_ci_ben_acct_type_list',
+                                filters: [
+                                    ['isinactive', 'is', 'F']
+                                ],
+                                columns: ['name']
+                            });
+
+                            beneficiaryAccountTypeList.run().each(function (result) {
+
+                                newField.addSelectOption({
+                                    value: result.id,
+                                    text: result.getValue({
+                                        name: 'name'
+                                    })
+                                });
+
+                                return true;
+                            });
+                        } else if (fieldName == "BOI CODES") {
+                            newField.addSelectOption({ value: '', text: '--Select--' });
+                            search.create({
+                                type: 'customrecord_ci_adv_boi_cd_lt',
+                                filters: [],
+                                columns: ['name']
+                            }).run().each(function (result) {
+                                newField.addSelectOption({
+                                    value: result.id,
+                                    text: result.getValue('name')
+                                });
+                                return true;
+                            });
+                            log.debug('added BOI CODES field')
                         }
 
                     }
@@ -2087,8 +2246,9 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                 "ADDITIONAL LOGO": "custpage_additional_logo",
                 "SUPPLIER ACCOUNT NUMBER": "custpage_supplier_account_number",
                 "PAYMENT REASON NAME": "custpage_payment_reason_name",
-                "BANK INSTRUCTION 1": "custpage_bank_instruction_1"
-
+                "BANK INSTRUCTION 1": "custpage_bank_instruction_1",
+                "BENEFICIARY ACCOUNT TYPE": "custpage_ci_adv_ben_acct_type",
+                "BOI CODES": "custpage_boi_codes"
             };
             return fieldMapObj;
         }
