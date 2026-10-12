@@ -452,8 +452,11 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 				refreshCreatedValuesWithText(context.newRecord.id);
 			}
 			const newRecord = context.newRecord;
-			let vendorId = newRecord.getValue('custrecordci_adv_details');
+			const oldRecord = context.oldRecord;
+			// We can not read the value of the vendor ID directly from the new record as the newRecord only contain the modified fields, so we query it from the database.
+			let vendorId = newRecord.getValue('custrecordci_adv_details') ? newRecord.getValue('custrecordci_adv_details') : oldRecord.getValue('custrecordci_adv_details');
 			let approvalStatus = newRecord.getValue('custrecord_ci_adv_approval_status');
+			log.audit('VBD Details',`Vendor ID: ${vendorId} | Approval Status: ${approvalStatus}`)
 			let vendorRecordSavedId = record.submitFields({
 				type: 'vendor',
 				id: vendorId,
@@ -461,10 +464,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 					'custentity_ci_adv_as': approvalStatus
 				}
 			});
-			log.debug({
-				title: 'Vendor Record Saved',
-				details: 'Vendor Record ID: ' + vendorRecordSavedId
-			});
+			log.audit({title: 'Vendor Record Saved',details: 'Vendor Record ID: ' + vendorRecordSavedId});
 		} catch (e) {
 			log.error({
 				title: 'Error updating vendor record',
