@@ -88,7 +88,7 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 				// Searching the VBD details table.
 				let VBDSearch = search.create({
 					type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId]],
-					columns: ['custrecordci_adv_details', 'custrecord_ci_old_values', 'custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', 'lastmodified']
+					columns: ['custrecordci_adv_details', 'custrecord_ci_old_values', 'custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', search.createColumn({ name: 'lastmodified', sort: search.Sort.DESC })]
 				});
 
 				VBDSearch = getFullResultSet(VBDSearch);
