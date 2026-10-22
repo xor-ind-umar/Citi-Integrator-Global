@@ -25,10 +25,12 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		entitledCheck: 'custrecord_ci_adv_enable_entitle'
 	};
 
+	// Checks whether the event is a record creation or edit.
 	const isCreateOrEdit = (eventType) =>
 		// The change-tracking logic is only relevant when a record is created or edited.
 		eventType === 'create' || eventType === 'edit';
 
+	// Reads a field value and converts missing values to an empty string.
 	const getFieldValue = (record, fieldId) => {
 		// Normalize empty NetSuite values so comparisons and JSON output stay consistent.
 		// Read the raw value because IDs are needed when comparing old and new records.
@@ -37,6 +39,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		return value === null || value === undefined ? '' : value;
 	};
 
+	// Gets the readable display value for a field, resolving vendor IDs when needed.
 	const getFieldDisplayValue = (record, fieldId) => {
 		// getText() returns display labels for list/record fields and the normal value for other fields.
 		const rawValue = getFieldValue(record, fieldId);
@@ -76,6 +79,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		return rawValue;
 	};
 
+	// Returns a field's readable label, or its ID if no label is available.
 	const getFieldLabel = (record, fieldId) => {
 		// Store a readable field label in the JSON change log instead of only the field ID.
 		const field = record.getField({ fieldId });
@@ -83,6 +87,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		return field && field.label ? field.label : fieldId;
 	};
 
+	// Parses stored JSON and returns an empty object if the data is invalid.
 	const parseJsonObject = (value) => {
 		// Read previously captured edit values so later edits can be added without losing them.
 		if (!value) {
@@ -106,6 +111,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		}
 	};
 
+	// Removes generated UI-only fields from the values being stored.
 	const removeGeneratedInputFields = (values) => {
 		// Remove generated inpt_ and *_display entries from previously stored JSON.
 		Object.keys(values).forEach((key) => {
@@ -117,6 +123,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		return values;
 	};
 
+	// Searches for an entitlement record matching the current user, role, and input.
 	const findLoggedInUserRecord = (userId, roleId, inputValue, entitlementName) => {
 		// Find the internal ID of the entitlement required for the current event.
 		/* const queryEntitledIds = `SELECT id FROM ${CONFIG.entitlementsListId} WHERE name = '${entitlementName}'`;
@@ -152,6 +159,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		}).run().getRange({ start: 0, end: 1 });
 	};
 
+	// Finds the internal ID for a named entry in a custom list.
 	const getListValueId = (listId, listValueName) => {
 		// Resolve the list label to its internal ID before setting a list field.
 		const listQuery = `SELECT id FROM ${listId} WHERE name = '${listValueName}'`;
@@ -161,6 +169,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		return results.length ? results[0].id : '';
 	};
 
+	// Identifies system, approval, and generated fields that should not be recorded.
 	const shouldSkipField = (fieldId) => {
 		// These fields are system or UI fields and must not be included in the audit JSON.
 		return fieldId === CONFIG.createValuesFieldId
@@ -171,123 +180,69 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			|| fieldId.slice(-8) === '_display';
 	};
 
+	// Recognizes false values in the formats NetSuite uses for checkboxes.
 	const isFalseValue = (value) => {
 		// NetSuite checkboxes can return either false or the string F.
 		return value === false || String(value).toUpperCase() === 'F';
 	};
+	// Checks whether a value is an empty array.
 	const isEmptyArray = (value) => {
 		// Check if the value is an empty array.
 		return Array.isArray(value) && value.length === 0;
 	};
 
-	const collectValuesToStore = (newRecord, oldRecord) => {
-		// Build the payload that belongs to this save.
-		// Create: include populated fields. Edit: include only changed fields.
+	// Collects the record's meaningful field values into a readable object.
+	const collectValuesToStore = (recordToRead) => {
+		// Build a complete snapshot from the record's current values.
 		const valuesToStore = {};
 
-		newRecord.getFields().forEach((fieldId) => {
+		recordToRead.getFields().forEach((fieldId) => {
 			// Process each field exposed by the current record.
 			if (shouldSkipField(fieldId)) {
 				return;
 			}
 
-			const newValue = getFieldValue(newRecord, fieldId);
-			const fieldLabel = getFieldLabel(newRecord, fieldId);
-			const oldValue = oldRecord ? getFieldValue(oldRecord, fieldId) : '';
+			const fieldValue = getFieldValue(recordToRead, fieldId);
+			const fieldLabel = getFieldLabel(recordToRead, fieldId);
 			// Some generated input fields expose an inpt_ label even when their ID looks valid.
-			if (fieldLabel.indexOf('inpt_') === 0 || (!oldRecord && isFalseValue(newValue)) || (!oldRecord && isEmptyArray(newValue)) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' || fieldLabel === 'Last Modified At') {
+			if (fieldLabel.indexOf('inpt_') === 0 || isFalseValue(fieldValue) || isEmptyArray(fieldValue) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' || fieldLabel === 'Last Modified At') {
 				return;
 			}
 
-			// An old record exists only during edit; create has no previous value.
-			const fieldWasChanged = oldRecord && String(newValue) !== String(oldValue);
-			// Store populated create fields or changed edit fields.
-			const shouldStoreField = (!oldRecord && newValue !== '') || fieldWasChanged;
-
-			if (shouldStoreField) {
+			if (fieldValue !== '') {
 				// Use the field label as the key and display text for list/record values.
-				valuesToStore[fieldLabel] = getFieldDisplayValue(newRecord, fieldId);
+				valuesToStore[fieldLabel] = getFieldDisplayValue(recordToRead, fieldId);
 			}
 		});
 
 		return removeGeneratedInputFields(valuesToStore);
 	};
 
-	const collectPreviousValuesToStore = (newRecord, oldRecord, existingValues) => {
-		const previousValues = Object.assign({}, existingValues);
-
-		if (!oldRecord) {
-			return previousValues;
-		}
-
-		newRecord.getFields().forEach((fieldId) => {
-			if (shouldSkipField(fieldId)) {
-				return;
-			}
-
-			const newValue = getFieldValue(newRecord, fieldId);
-			const oldValue = getFieldValue(oldRecord, fieldId);
-			const fieldLabel = getFieldLabel(newRecord, fieldId);
-
-			if (fieldLabel.indexOf('inpt_') === 0
-				|| fieldLabel === 'Created By'
-				|| fieldLabel === 'Modified by role'
-				|| fieldLabel === 'Creator Role'
-				|| fieldLabel === 'Modified by'
-				|| fieldLabel === 'Modified'
-				|| fieldLabel === 'Last Modified At'
-				|| String(newValue) === String(oldValue)) {
-				return;
-			}
-
-			// Store the value that existed immediately before this edit.
-			previousValues[fieldLabel] = getFieldDisplayValue(oldRecord, fieldId);
-		});
-		log.audit('243', previousValues);
-		return removeGeneratedInputFields(previousValues);
-	};
-
-	const persistValues = (newRecord, oldRecord, valuesToStore) => {
-		// Creation values and later edits are stored in separate fields.
-		if (!oldRecord && Object.keys(valuesToStore).length === 0) {
+	// Saves creation or edit values as JSON on the record.
+	const persistValues = (newRecord, oldRecord, previousValues, currentValues) => {
+		if (!oldRecord && Object.keys(currentValues).length === 0) {
 			return;
 		}
 
-		const targetFieldId = oldRecord ? CONFIG.editedValuesFieldId : CONFIG.createValuesFieldId;
-		// On edit, read the original create values and any previously saved edit values.
-		const originalValues = oldRecord
-			? removeGeneratedInputFields(parseJsonObject(getFieldValue(oldRecord, CONFIG.createValuesFieldId)))
-			: {};
-		const previousEditedValues = oldRecord
-			? removeGeneratedInputFields(parseJsonObject(getFieldValue(oldRecord, CONFIG.editedValuesFieldId)))
-			: {};
-		const previousValues = collectPreviousValuesToStore(newRecord, oldRecord, originalValues);
-
-		// Merge by field label. Duplicate keys are stored once, and the newest edit wins.
-		const valuesToPersist = oldRecord
-			? Object.assign({}, previousValues, valuesToStore)
-			: valuesToStore;
-		const editedValuesToPersist = oldRecord
-			? Object.assign({}, previousValues, previousEditedValues, valuesToStore)
-			: valuesToPersist;
+		if (oldRecord) {
+			newRecord.setValue({
+				fieldId: CONFIG.createValuesFieldId,
+				value: JSON.stringify(previousValues)
+			});
+			newRecord.setValue({
+				fieldId: CONFIG.editedValuesFieldId,
+				value: JSON.stringify(currentValues)
+			});
+			return;
+		}
 
 		newRecord.setValue({
-			// Write the original values and current changes to separate audit fields.
-			fieldId: oldRecord ? CONFIG.createValuesFieldId : targetFieldId,
-			value: JSON.stringify(previousValues)
-		});
-		log.audit('previousValues', previousValues);
-		log.audit('editedValuesToPersist', editedValuesToPersist);
-		log.audit('valuesToStore', valuesToStore);
-		newRecord.setValue({
-			fieldId: oldRecord ? CONFIG.editedValuesFieldId : targetFieldId,
-			value: JSON.stringify(editedValuesToPersist)/* //oldRecord
-			? JSON.stringify(Object.assign({}, editedValuesToPersist, previousValues, valuesToStore))
-			: JSON.stringify(valuesToStore)// */
-			/*  //  */
+			fieldId: CONFIG.createValuesFieldId,
+			value: JSON.stringify(currentValues)
 		});
 	};
 
+	// Reloads a newly created bank-details record and stores its readable field values.
 	const refreshCreatedValuesWithText = (recordId) => {
 		// Create-mode records can contain list/record IDs before they are persisted.
 		// Reloading the saved record allows NetSuite to return the display text.
@@ -296,7 +251,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			id: recordId,
 			isDynamic: false
 		});
-		const createdValues = collectValuesToStore(savedRecord, null);
+		const createdValues = collectValuesToStore(savedRecord);
 		let applist = getApproverList();
 		log.audit({ title: 'Approver List', details: applist });
 		savedRecord.setValue({ fieldId: 'customrecord_ci_adv_entity_bank_details', value: applist });
@@ -312,6 +267,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			}
 		}); */
 	};
+	// Finds the users who have the Vendor Bank Details Approver entitlement.
 	const getApproverList = () => {
 		let queryEntitle = `SELECT id FROM customlist_ci_entitlements WHERE name = 'Vendor Bank Details Approver'`;
 		//This is used to retrieve the internal id of the entitlement with the name 'Vendor Bank Details Approver' or 'Vendor Bank Details'
@@ -333,6 +289,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		return searchResults;
 	};
 
+	// Checks the configuration record to see whether entitlement processing is enabled.
 	const isFeatureInEffect = () => {
 		// Implement the logic to check if the Entitlement feature is enabled.
 		// Return true if the feature is enabled, false otherwise.
@@ -348,6 +305,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 	 * @param {Record} context.newRecord
 	 * @param {Record} context.oldRecord
 	 */
+	// Sets creator or modifier details, approval status, and audit values before saving.
 	const beforeSubmit = (context) => {
 		// if the Entitlement feature is enabled should this logic run AND create and edit events contain values that need to be recorded.
 		if (isFeatureInEffect() == false || isFeatureInEffect() == null || isFeatureInEffect() == 'F' || !isCreateOrEdit(context.type)) { return; }
@@ -355,6 +313,8 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		const newRecord = context.newRecord;
 		// The old record contains the previously saved values during edit events.
 		const oldRecord = context.oldRecord;
+		const previousValues = oldRecord ? collectValuesToStore(oldRecord) : {};
+		const valuesToStore = collectValuesToStore(newRecord);
 		// Read the user and role of the person performing the operation.
 		const currentUser = runtime.getCurrentUser();
 		//When the old record exists, it means the current operation is an edit.
@@ -385,29 +345,6 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 				value: currentUser.role
 			});
 		}
-		/* // Read the entitlement value entered on the record before checking authorization.
-		const inputValue = getFieldValue(newRecord, CONFIG.inputFieldId);
-		// Creation and edit operations require different entitlement names.
-		const entitlementName = oldRecord ? CONFIG.editEntitlementName : CONFIG.createEntitlementName;
-		// Verify that this user, role, and entitlement are allowed together.
-		log.audit({
-			title: 'Finding matching records for user entitlement',
-			details: { userId: currentUser.id, roleId: currentUser.role, inputValue, entitlementName }
-		}); */
-		/* const matchingRecords = findLoggedInUserRecord(
-			currentUser.id,
-			currentUser.role,
-			inputValue,
-			entitlementName
-		); */
-
-		//if (!matchingRecords.length) 
-		// Do not create an audit payload when the user is not authorized for this entitlement.
-		/* log.audit({
-			title: 'User is not entitled for VBD operation',
-			details: { userId: currentUser.id, roleId: currentUser.role, inputValue, entitlementName }
-		}); */
-		// Set the approval status using the list entry's internal ID, not the label text.
 		// Resolve the Pending Approval list label to its internal ID.
 		const pendingApprovalId = getListValueId(CONFIG.approvalStatusListId, CONFIG.pendingApprovalName);
 		if (pendingApprovalId) {
@@ -425,7 +362,6 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			});
 		}
 		// Step 3: collect only the values relevant to this create or edit.
-		const valuesToStore = collectValuesToStore(newRecord, oldRecord);
 		// Log the final payload for troubleshooting and approval processing.
 		log.audit({
 			title: 'Values to store',
@@ -433,7 +369,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		});
 
 		// Step 4: merge the payload with previous edits and save it as JSON.
-		persistValues(newRecord, oldRecord, valuesToStore);
+		persistValues(newRecord, oldRecord, previousValues, valuesToStore);
 	};
 
 	/**
@@ -443,6 +379,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 	 * @param {Record} context.newRecord
 	 * @param {Record} context.oldRecord
 	 */
+	// Refreshes created-record audit values and updates the vendor for primary accounts.
 	const afterSubmit = (context) => {
 		try {
 			// Exit early if the Entitlement feature is not in effect.
