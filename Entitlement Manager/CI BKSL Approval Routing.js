@@ -81,23 +81,33 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 					queryEntitledResults = search.create({ type: 'customrecord_ci_entitlement_manager', filters: [['custrecord_ci_ent_mgr_user_permissions', 'anyof', queryEntitleId], 'AND', ['custrecord_ci_ent_mgr_user', 'anyof', currentUser.id], 'AND', ['custrecord_ci_ent_mgr_user_role', 'anyof', currentUser.role]] }).run().getRange({ start: 0, end: 1 });
 				}
 				let isCurrentUserEntitled = false;
-				let isCreatorCurrentUser;
 				if (queryEntitledResults && queryEntitledResults.length > 0) isCurrentUserEntitled = true;
 				log.audit('queryEntitledResults',` queryEntitledResults: ${queryEntitledResults} isCurrentUserEntitled : ${isCurrentUserEntitled}`);
 
 				// Searching the VBD details table.
-				let VBDSearch = search.create({
+				let VBDSearchData = search.create({
 					type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId]],
 					columns: ['custrecordci_adv_details', 'custrecord_ci_old_values', 'custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', search.createColumn({ name: 'lastmodified', sort: search.Sort.DESC })]
 				});
+				var pageIndex = context.request.parameters.pageIndex || 0, pageSize = context.request.parameters.pageSize || 100; //rutuja made changes for pagination
+				log.audit('VBD SearchResults', `VBDSearchData: ${VBDSearchData}, VBDSearchData length: ${VBDSearchData.length}`);
 
-				VBDSearch = getFullResultSet(VBDSearch);
-				log.audit('VBD SearchResults', `VBDSearch: ${VBDSearch}, VBDSearch length: ${VBDSearch.length}`);
+				var VBDSearch = getFullResultSet(VBDSearchData, pageIndex, pageSize); //rutuja made changes for pagination
+				const totalPages = VBDSearch.totalPages;
+				log.audit('VBD totalPages', totalPages);
+
+				const totalCount = VBDSearch.totalCount;
+				log.audit('VBD totalCount', totalCount);
+
+				VBDSearch = VBDSearch.searchData;
+				log.audit('VBD VBDSearch', VBDSearch);
+
 
 				// Executing the code only when the Entitlement Manager search is not empty.
 				if (!isEmpty(VBDSearch)) {
 					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
 					for (let vbd = 0; vbd < VBDSearch.length; vbd++) {
+						let isCreatorCurrentUser;
 						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified');
 						let creator = VBDSearch[vbd].getText('custrecord_ci_adv_createdby');
 						let modifier = VBDSearch[vbd].getText('custrecord_ci_adv_modified_by');
@@ -135,7 +145,7 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 					}
 				}
 				userList.push({ isCurrentUserEntitled: isCurrentUserEntitled, currentUser: currentUser.name, currentuserId: currentUser.id, CurrentuserRole: currentUser.role });
-				var bodyVal = { 'approvalList': VBDlist, 'runtimeUser': userList };
+				var bodyVal = { 'totalPages': totalPages, 'totalCount': totalCount, 'approvalList': VBDlist, 'runtimeUser': userList };
 				log.audit('bodyVal', JSON.stringify(bodyVal))
 				context.response.setHeader({ name: 'Content-Type', value: 'application/json; charset=UTF-8' });
 				context.response.write({ output: JSON.stringify(bodyVal) });
@@ -151,17 +161,26 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 		* @param {search.Search} mySearch
 		* @returns {Array<search.Result>} searchResults - Returns an array of search results
 		*/
-		function getFullResultSet(mySearch) {
-			let searchResults = [],
-				pagedData;
-			pagedData = mySearch.runPaged({ pageSize: 1000 });
-			pagedData.pageRanges.forEach(function (pageRange) {
-				let page = pagedData.fetch({ index: pageRange.index });
+		function getFullResultSet(mySearch, pageIndex, pageSize) {
+			let searchResults = [];
+			let pagedData = mySearch.runPaged({ pageSize: pageSize });
+
+			const totalPages = pagedData.pageRanges.length;
+			const totalCount = pagedData.count;
+
+			log.audit('totalPages', totalPages);
+			log.audit('totalCount', totalCount);
+
+
+			// Check if the requested page index exists before fetching
+			if (pagedData.pageRanges.length > pageIndex) {
+				let page = pagedData.fetch({ index: pageIndex });
 				page.data.forEach(function (result) {
 					searchResults.push(result);
 				});
-			});
-			return searchResults;
+			}
+			return { 'totalCount': totalCount, 'totalPages': totalPages, 'searchData': searchResults };
+
 		}
 		/**
 		* Check if value is empty (null, undefined, empty array, empty object)
@@ -169,8 +188,8 @@ define(['N/search', 'N/record', 'N/https', 'N/query', 'N/runtime'],
 		* @returns {boolean} - Returns true if the input value is empty
 		*/
 		function isEmpty(stValue) {
-			return ((stValue == 0 || stValue === '' || stValue == null || stValue == undefined) || (stValue.letructor === Array && stValue.length == 0) || (stValue.letructor === Object && (function (v) {
-				for (let k in v)
+			return ((stValue == 0 || stValue === '' || stValue == null || stValue == undefined) || (stValue.constructor === Array && stValue.length == 0) || (stValue.constructor === Object && (function (v) {
+				for (var k in v)
 					return false;
 				return true;
 			})(stValue)));

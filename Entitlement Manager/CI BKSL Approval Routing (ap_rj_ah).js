@@ -138,10 +138,20 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 				let approvalStatusId = queryResults.map((result) => result.id);
 				log.audit('approvalStatusId', approvalStatusId);
 				// Searching the VBD details table by filterign the with specifc field called approval status.
-				let VBDSearch = search.create({type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]],columns: ['custrecordci_adv_details', 'custrecord_ci_old_values','custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', search.createColumn({ name: 'lastmodified', sort: search.Sort.DESC }),'lastmodifiedby','custrecord_ci_adv_reject_reason','custrecord_ci_adv_approval_status','custrecord_ci_adv_lastmodified_at']});
+				//rutuja changed VBDSearch to VBDSearchData 9th oct
+				let VBDSearchData = search.create({ type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]], columns: ['custrecordci_adv_details', 'custrecord_ci_old_values', 'custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', search.createColumn({ name: 'lastmodified', sort: search.Sort.DESC }), 'lastmodifiedby', 'custrecord_ci_adv_reject_reason', 'custrecord_ci_adv_approval_status', 'custrecord_ci_adv_lastmodified_at'] });
+				var pageIndex = context.request.parameters.pageIndex || 0, pageSize = context.request.parameters.pageSize || 100; //rutuja made changes for pagination
 
-				VBDSearch = getFullResultSet(VBDSearch);
-				log.audit('VBDSearch',`VBDSearch: ${JSON.stringify(VBDSearch)} VBDSearch length: ${VBDSearch.length}`);
+				var VBDSearch = getFullResultSet(VBDSearchData, pageIndex, pageSize); //rutuja made changes for pagination
+				log.audit('VBDSearch', `VBDSearch: ${JSON.stringify(VBDSearch)} VBDSearch length: ${VBDSearch.length}`);
+				const totalPages = VBDSearch.totalPages; //rutuja changes 9th oct
+				log.audit('VBD totalPages', totalPages);
+
+				const totalCount = VBDSearch.totalCount; //rutuja changes 9th oct
+				log.audit('VBD totalCount', totalCount);
+
+				VBDSearch = VBDSearch.searchData; //rutuja changes 9th oct
+				log.audit('VBD VBDSearch', VBDSearch);
 
 				// Executing the code only when the Entitlement Manager search is not empty.
 				if (!isEmpty(VBDSearch)) {
@@ -183,7 +193,7 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 						log.audit('VBDlist after processing create record', JSON.stringify(VBDlist));
 					}
 				}
-				var bodyVal =  {'approvalHistory': VBDlist};
+				var bodyVal = { 'totalPages': totalPages, 'totalCount': totalCount, 'approvalHistory': VBDlist };
 				log.audit(`Request Body`, 'bodyVal', JSON.stringify(bodyVal))
 				context.response.setHeader({ name: 'Content-Type', value: 'application/json; charset=UTF-8' });
 				context.response.write({ output: JSON.stringify(bodyVal) });
@@ -202,14 +212,14 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
      */
     const getApprovalStatusSystemNote = (recordId) => {
         try {
-            const systemNoteSearch = search.create({type: 'customrecord_ci_adv_entity_bank_details',filters: [['internalid','anyof',recordId]],columns: [search.createColumn({name: 'date',join: 'systemnotes',sort: search.Sort.DESC}),search.createColumn({name: 'name',join: 'systemnotes'}),search.createColumn({name: 'newvalue',join: 'systemnotes'})]});
-            const result =systemNoteSearch.run().getRange({start: 0,end: 1});
+				const systemNoteSearch = search.create({ type: 'customrecord_ci_adv_entity_bank_details', filters: [['internalid', 'anyof', recordId]], columns: [search.createColumn({ name: 'date', join: 'systemnotes', sort: search.Sort.DESC }), search.createColumn({ name: 'name', join: 'systemnotes' }), search.createColumn({ name: 'newvalue', join: 'systemnotes' })] });
+				const result = systemNoteSearch.run().getRange({ start: 0, end: 1 });
 
-            if (!result || result.length === 0) {return {lastModifiedAt: '',lastModifiedBy: ''};}
+				if (!result || result.length === 0) { return { lastModifiedAt: '', lastModifiedBy: '' }; }
             const row = result[0];
             return {
-                lastModifiedAt:row.getValue({name: 'date',join: 'systemnotes'}) || '',
-                lastModifiedBy:row.getText({name: 'name',join: 'systemnotes'}) || row.getValue({name: 'name',join: 'systemnotes'}) || ''
+					lastModifiedAt: row.getValue({ name: 'date', join: 'systemnotes' }) || '',
+					lastModifiedBy: row.getText({ name: 'name', join: 'systemnotes' }) || row.getValue({ name: 'name', join: 'systemnotes' }) || ''
             };
         } catch (e) {
             log.error({
@@ -251,18 +261,23 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 		 * @param {search.Search} mySearch
 		 * @returns {Array<search.Result>} searchResults - Returns an array of search results
 		 */
-		function getFullResultSet(mySearch) {
-			var searchResults = [],
-				pagedData;
-			pagedData = mySearch.runPaged({ pageSize: 1000 });
-			pagedData.pageRanges.forEach(function (pageRange) {
-				var page = pagedData.fetch({ index: pageRange.index });
+		function getFullResultSet(mySearch, pageIndex, pageSize) { //rutuja made changes for pagination
+			let searchResults = [];
+			let pagedData = mySearch.runPaged({ pageSize: pageSize });
+
+			const totalPages = pagedData.pageRanges.length; //rutuja changes 9th oct
+			const totalCount = pagedData.count; //rutuja changes 9th oct
+
+			// Check if the requested page index exists before fetching
+			if (pagedData.pageRanges.length > pageIndex) {
+				let page = pagedData.fetch({ index: pageIndex });
 				page.data.forEach(function (result) {
 					searchResults.push(result);
 				});
-			});
-			return searchResults;
+			}
+			return { 'totalCount': totalCount, 'totalPages': totalPages, 'searchData': searchResults }; //rutuja changes 9th oct
 		}
+		//rutuja made changes for pagination
 
 		/**
 		 * Check if value is empty (null, undefined, empty array, empty object)
