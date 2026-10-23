@@ -393,7 +393,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			// We can not read the value of the vendor ID directly from the new record as the newRecord only contain the modified fields, so we query it from the database.
 			let vendorId = newRecord.getValue('custrecordci_adv_details') ? newRecord.getValue('custrecordci_adv_details') : oldRecord.getValue('custrecordci_adv_details');
 			let approvalStatus = newRecord.getValue('custrecord_ci_adv_approval_status');
-			let isPrimaryAccount = newRecord.getValue('custrecord_ci_adv_primary_account');
+			let isPrimaryAccount = newRecord.getValue('custrecord_ci_adv_primary_account') || oldRecord.getValue('custrecord_ci_adv_primary_account');
             log.audit('VBD Details',`Vendor ID: ${vendorId} | Approval Status: ${approvalStatus} | Primary Account: ${isPrimaryAccount}`)
 			if(isPrimaryAccount == true || isPrimaryAccount == 'T')
 			{
