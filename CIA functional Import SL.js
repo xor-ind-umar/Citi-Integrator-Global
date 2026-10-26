@@ -563,6 +563,10 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
          */
         function loadVBDHomePage(form, context) {
             try {
+                var currentUser = runtime.getCurrentUser();
+                var featureInEffect = isFeatureInEffect();
+                var isCurrentUserEntitled = isCurrentUserEntitledToEdit(currentUser);
+                //if (isCurrentUserEntitled == false || isCurrentUserEntitled == 'F') { context.response.writePage('Access denied: You are not entitled to edit this record');}
                 var pageId = context.request.parameters.pageId || 0;
                 log.debug("pageId==", pageId);
                 form.addButton({ id: 'custpage_home_btn', label: 'Invoice Payments', functionName: 'goHome' });
@@ -612,6 +616,7 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                 log.debug('searchResultCount', searchResultCount);
 
                 if (searchResultCount > 0) {
+                    
                     var totalPages = pagedSearch.pageRanges.length;
                     log.debug('totalPages', totalPages);
 
@@ -643,7 +648,7 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                     var results = searchResultPage.data;
                     log.debug("results- searchResultPage :", JSON.stringify(searchResultPage));
                     log.debug("VBD records length:", results.length);
-
+                    
                     for (var i = 0; i < results.length; i++) {
                         var recId = results[i].getValue('internalid');
                         var vendorId = results[i].getValue('custrecordci_adv_details');
@@ -682,16 +687,15 @@ define(['N/ui/serverWidget', 'N/search', 'N/file', 'N/record', 'N/url', 'N/redir
                         // Action
                         // Start -- Umar has added the condition to only show the action links if the approval status is not 'Pending Approval' on 25th Sept 2026
                         //log.debug('Approval Status', approvalStatus);
-                        if (approvalStatus && approvalStatus.trim() == 'Pending Approval' && (isFeatureInEffect() == true || isFeatureInEffect() == 'T')) {
+                        if (approvalStatus && (approvalStatus.trim() == 'Pending Approval' || approvalStatus.trim() == 'Rejected') && (featureInEffect == true || featureInEffect == 'T')) {
                             sublist.setSublistValue({
                                 id: 'approval_status',
                                 line: i,
                                 value: approvalStatus
                             });
-                            var message = 'This record is currently pending approval'
-                            var currentUser = runtime.getCurrentUser();
+                            var message = 'This record is currently '+approvalStatus.trim();
                             //If the current user is not entitled to edit the vendor bank details.
-                            if (isCurrentUserEntitledToEdit(currentUser) == false || isCurrentUserEntitledToEdit(currentUser) == 'F') { message = 'You are not entitled to edit this record'; }
+                            if (isCurrentUserEntitled == false || isCurrentUserEntitled == 'F') { message = 'You are not entitled to edit this record'; }
                             actionHtml =
                                 '<span title="' + message + '" style="color:#777; cursor:not-allowed; text-decoration:none;">Edit</span> | ' +
                                 '<span title="' + message + '" style="color:#777; cursor:not-allowed; text-decoration:none;">Delete</span>';
