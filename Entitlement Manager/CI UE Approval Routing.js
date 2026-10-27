@@ -437,10 +437,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			});
 		}
 		// Log the values that will be written to the audit JSON for troubleshooting.
-		log.audit({
-			title: 'Values to store',
-			details: valuesToStore
-		});
+		log.audit('Values to store', `previousValues: ${JSON.stringify(previousValues)}, newValues: ${JSON.stringify(valuesToStore)}`);
 
 		// Save the collected values in the appropriate JSON field.
 		persistValues(newRecord, oldRecord, previousValues, valuesToStore);
