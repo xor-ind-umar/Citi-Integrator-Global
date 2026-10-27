@@ -29,25 +29,29 @@ define(['N/runtime', 'N/search', 'N/error', 'N/query'], function (runtime, searc
         const currentUser = runtime.getCurrentUser();
         const contextType = String(scriptContext && scriptContext.type || '').toUpperCase();
         const hasPermission = isCurrentUserEntitledToEdit(currentUser);
-
+         let queryResults = query.runSuiteQL({ query: `SELECT custrecord_ci_adv_enable_entitle FROM customrecord_ci_adv_general_config` }).asMappedResults();
+         // if entitlement is not enabled, skip further checks
+        if (queryResults && queryResults.length > 0 && !queryResults[0]['custrecord_ci_adv_enable_entitle']) {
+            return false;
+        }
         log.debug('Basic Info', `Context Type: ${contextType} | permission: ${hasPermission}`);
 
-        let denialMessage = null;
+        let notAuthorize = false;
 
         if (contextType === 'CREATE' && !hasPermission) {
-            denialMessage = 'Access Denied: You are not authorized to create this record.';
+            notAuthorize = true;
         } else if (contextType === 'EDIT' && !hasPermission) {
-            denialMessage = 'Access Denied: You are not authorized to edit this record.';
+            notAuthorize = true;
         } else if (contextType === 'VIEW' && !hasPermission) {
-            denialMessage = 'Access Denied: You are not authorized to view this record.';
+            notAuthorize = true;
         }
 
-        log.debug('isUnauthorized', !!denialMessage);
+        log.debug('isUnauthorized', !!notAuthorize);
 
-        if (denialMessage) {
+        if (notAuthorize) {
             throw error.create({
                 name: 'ENTITLEMENT_RESTRICTION',
-                message: denialMessage,
+                message: `Access Denied: You are not authorized to ${contextType.toLowerCase()} this record.`,
                 notifyOff: true
             });
         }
