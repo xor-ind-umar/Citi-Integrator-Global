@@ -35,6 +35,8 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		// Normalize empty NetSuite values so comparisons and JSON output stay consistent.
 		// Read the raw value because IDs are needed when comparing old and new records.
 		const value = record.getValue({ fieldId });
+		if(value === 'T'){return true;}
+		if(value === 'F'){return false;}
 		// Convert null and undefined to an empty string for consistent processing.
 		return value === null || value === undefined ? '' : value;
 	};
@@ -180,19 +182,13 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			|| fieldId.slice(-8) === '_display';
 	};
 
-	// Recognizes false values in the formats NetSuite uses for checkboxes.
-	const isFalseValue = (value) => {
-		// NetSuite checkboxes can return either false or the string F.
-		return value === false || String(value).toUpperCase() === 'F';
-	};
 	// Checks whether a value is an empty array.
 	const isEmptyArray = (value) => {
 		// Check if the value is an empty array.
 		return Array.isArray(value) && value.length === 0;
 	};
-
-	// Collects the record's meaningful field values into a readable object.
-	const collectValuesToStore = (recordToRead) => {
+	// Collects meaningful field values, optionally recording only checkbox changes from a comparison record.
+	const collectValuesToStore = (recordToRead, comparisonRecord) => {
 		// Build a complete snapshot from the record's current values.
 		const valuesToStore = {};
 
@@ -202,16 +198,32 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 				return;
 			}
 
-			const fieldValue = getFieldValue(recordToRead, fieldId);
-			const fieldLabel = getFieldLabel(recordToRead, fieldId);
+			let fieldValue = getFieldValue(recordToRead, fieldId);
+			const fieldLabel = String(getFieldLabel(recordToRead, fieldId) || '').trim();
+			if (fieldValue === 'T') {
+				fieldValue = true;
+			} else if (fieldValue === 'F') {
+				fieldValue = false;
+			}
 			// Some generated input fields expose an inpt_ label even when their ID looks valid.
-			if (fieldLabel.indexOf('inpt_') === 0 || isFalseValue(fieldValue) || isEmptyArray(fieldValue) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' || fieldLabel === 'Last Modified At') {
+			if (fieldLabel.indexOf('inpt_') === 0 || isEmptyArray(fieldValue) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' || fieldLabel === 'Last Modified At') {
 				return;
 			}
-
+			if (typeof fieldValue === 'boolean') {
+				if (comparisonRecord) {
+					const oldFieldValue = getFieldValue(comparisonRecord, fieldId);
+					if (typeof oldFieldValue !== 'boolean' || oldFieldValue === fieldValue) {
+						return;
+					}
+				} else if (fieldValue === false) {
+					return;
+				}
+			}
 			if (fieldValue !== '') {
-				// Use the field label as the key and display text for list/record values.
-				valuesToStore[fieldLabel] = getFieldDisplayValue(recordToRead, fieldId);
+				// Keep checkbox values as booleans and use display text for other field types.
+				valuesToStore[fieldLabel] = typeof fieldValue === 'boolean'
+					? fieldValue
+					: getFieldDisplayValue(recordToRead, fieldId);
 			}
 		});
 
@@ -314,7 +326,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 		// The old record contains the previously saved values during edit events.
 		const oldRecord = context.oldRecord;
 		const previousValues = oldRecord ? collectValuesToStore(oldRecord) : {};
-		const valuesToStore = collectValuesToStore(newRecord);
+		const valuesToStore = collectValuesToStore(newRecord, oldRecord);
 		// Read the user and role of the person performing the operation.
 		const currentUser = runtime.getCurrentUser();
 		//When the old record exists, it means the current operation is an edit.
@@ -390,7 +402,6 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 			}
 			const newRecord = context.newRecord;
 			const oldRecord = context.oldRecord;
-			// We can not read the value of the vendor ID directly from the new record as the newRecord only contain the modified fields, so we query it from the database.
 			let vendorId = newRecord.getValue('custrecordci_adv_details') ? newRecord.getValue('custrecordci_adv_details') : oldRecord.getValue('custrecordci_adv_details');
 			let approvalStatus = newRecord.getValue('custrecord_ci_adv_approval_status');
 			let isPrimaryAccount = newRecord.getValue('custrecord_ci_adv_primary_account') || oldRecord.getValue('custrecord_ci_adv_primary_account');
