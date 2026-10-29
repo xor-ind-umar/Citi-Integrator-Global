@@ -219,7 +219,7 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 				fieldValue = false;
 			}
 			// Do not include generated labels, empty selections, or system-maintained fields.
-			if (fieldLabel.indexOf('inpt_') === 0 || isEmptyArray(fieldValue) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' || fieldLabel === 'Last Modified At') {
+			if (fieldLabel.indexOf('inpt_') === 0 || isEmptyArray(fieldValue) || fieldLabel === 'Created By' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by role' || fieldLabel === 'Creator Role' || fieldLabel === 'Modified by' || fieldLabel === 'Modified' || fieldLabel === 'Last Modified At' || fieldLabel === 'Created At') {
 				return;
 			}
 			// When editing, compare checkbox values with the previously saved record.
@@ -235,10 +235,10 @@ define(['N/runtime', 'N/search', 'N/query', 'N/record'], (runtime, search, query
 					return;
 				}
 			}
-			// Keep checkboxes as booleans; use display text for list and record fields.
+			// Store checkbox values as the strings "True" or "False" in the JSON.
 			if (fieldValue !== '') {
 				valuesToStore[fieldLabel] = typeof fieldValue === 'boolean'
-					? fieldValue
+					? (fieldValue ? 'True' : 'False')
 					: getFieldDisplayValue(recordToRead, fieldId);
 			}
 		});
