@@ -19,8 +19,8 @@
  * 2026/09/24                          	Rutuja Tembare           Initial version
  */
 
-define(['N/search', 'N/record', 'N/query', 'N/log'],
-	function (search, record, query, log) {
+define(['N/search', 'N/record', 'N/query', 'N/log', 'N/format', 'N/https','N/runtime'],
+	function (search, record, query, log, format, https, runtime) {
 
 		/**
 		 * Defines the function that is executed when a request is sent to a Suitelet.
@@ -82,11 +82,11 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 						return '';
 					}
 				});
-				log.audit(`queryResults: ${JSON.stringify(queryResults)} ApprovalListIds id: ${approvalStatusId[0].id}`);
-				if(approvalsList.length > 0){
+				log.audit('Approval Status Query',`queryResults: ${JSON.stringify(queryResults)} ApprovalListIds id: ${approvalStatusId[0].id}`);
+				if (approvalsList.length > 0) {
 					var vendorBankDetailsId = approvalsList[0].VBDId;
 				}
-				else{ log.audit('No approvals found in the request parameters'); return JSON.stringify({ error: 'No approvals found in the request parameters' }); }
+				else { log.audit('No approvals found in the request parameters'); return JSON.stringify({ error: 'No approvals found in the request parameters' }); }
 				var values = { 'custrecord_ci_adv_approval_status': approvalStatusId[0].id };
 
 				//This is used to add the rejection reason to the values object if the action is 'Rejected'
@@ -94,30 +94,45 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 					var rejectedReason = approvalsList[0].rejectionReason;
 					values['custrecord_ci_adv_reject_reason'] = rejectedReason;
 				}
-				else{
+				else {
 					values['custrecord_ci_adv_reject_reason'] = '';
 				}
-/* 
-				var customrecordciadventitybankdetails = search.create({type: "customrecord_ci_adv_entity_bank_details",filters: [["internalid", "anyof", vendorBankDetailsId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]], columns: ['created', 'lastmodified', 'lastmodifiedby']
-				}).run().getRange({ start: 0, end: 1 });
-				var lastmodifiedby = '';
-				var lastmodified = '';
-				if (customrecordciadventitybankdetails.length > 0) {
-					lastmodifiedby = customrecordciadventitybankdetails[0].getText('lastmodifiedby');
-					lastmodified = customrecordciadventitybankdetails[0].getValue('lastmodified');
-					log.audit('Last Modified Info', `lastmodifiedby: ${lastmodifiedby}, lastmodified: ${lastmodified}}`);
-				} */
-
 				var systemNoteResult = getApprovalStatusSystemNote(vendorBankDetailsId);
 				var lastModifiedAt = systemNoteResult.lastModifiedAt;
+				var createdAt = systemNoteResult.createdAt;
 				values['custrecord_ci_adv_lastmodified_at'] = lastModifiedAt;
-				var submitResultId = record.submitFields({type: 'customrecord_ci_adv_entity_bank_details', id: vendorBankDetailsId, values: values});
-				log.audit(`Values to submit ${JSON.stringify(values)} submitResultId ${submitResultId}`);
-				
+				values['custrecord_ci_adv_created_at'] = createdAt;
+				var submitResultId = record.submitFields({ type: 'customrecord_ci_adv_entity_bank_details', id: vendorBankDetailsId, values: values });
+				log.audit('Vendor Bank Details Update',`Values to submit ${JSON.stringify(values)} submitResultId ${submitResultId}`);
+
+				// Call the backend Suitelet directly without building an external URL.
+				let response = https.requestSuitelet({
+					scriptId: 'customscript_ci_adv_bksl_ah',
+					deploymentId: 'customdeploy_ci_adv_bksl_ah',
+					method: https.Method.POST,
+					body: JSON.stringify(requestParams),
+					headers: {
+						'Content-Type': 'application/json'
+					}
+				});
+				log.audit(`Response from Suitelet`, `Response: ${JSON.stringify(response)}`);
+				// Handle the conversion result sent back by the backend Suitelet
+				let approvalHistoryId = '';
+				let responseBody = {};
+				if (response.code === 200) {
+					responseBody = JSON.parse(response.body);
+					log.debug('Converted Date from Backend', responseBody);
+					approvalHistoryId = responseBody.approvalHistoryId;
+				} else {
+					log.error('Suitelet Error Status Code: ' + response.code, response.body);
+					responseBody = response.body
+				}
 				return JSON.stringify({
 					Status: 'Record successfully submitted',
 					'actioned at': lastModifiedAt,
-					'actioned by': systemNoteResult.lastModifiedBy
+					'actioned by': runtime.getCurrentUser().name,
+					'approvalHistoryId': approvalHistoryId,
+					'responseBody': responseBody
 				});
 			} catch (error) {
 				log.error('Error in saveVBDRecord', error);
@@ -139,7 +154,28 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 				log.audit('approvalStatusId', approvalStatusId);
 				// Searching the VBD details table by filterign the with specifc field called approval status.
 				//rutuja changed VBDSearch to VBDSearchData 9th oct
-				let VBDSearchData = search.create({ type: 'customrecord_ci_adv_entity_bank_details', filters: [['custrecord_ci_adv_approval_status', 'anyof', approvalStatusId], "AND", ["systemnotes.field", "anyof", "CUSTRECORD_CI_ADV_APPROVAL_STATUS"]], columns: ['custrecordci_adv_details', 'custrecord_ci_old_values', 'custrecord_ci_edited_values', 'custrecord_ci_adv_createdby', 'custrecord_ci_adv_creator_role', 'created', 'custrecord_ci_adv_modified', 'custrecord_ci_adv_modified_by', 'custrecord_ci_adv_modified_by_role', search.createColumn({ name: 'lastmodified', sort: search.Sort.DESC }), 'lastmodifiedby', 'custrecord_ci_adv_reject_reason', 'custrecord_ci_adv_approval_status', 'custrecord_ci_adv_lastmodified_at'] });
+				let filters = new Array();
+				filters.push(['custrecord_ci_adv_approval_status1', 'is', approvalStatusId]);
+				/* filters.push("AND");
+				filters.push(["systemnotes.field", "anyof", "custrecord_ci_adv_approval_status1"]); */
+				let columns = new Array();
+				columns.push('custrecord_ci_adv_vendor_name');
+				columns.push('custrecord_ci_old_values1');
+				columns.push('custrecord_ci_edited_values1');
+				columns.push('custrecord_ci_adv_createdby1');
+				columns.push('custrecord_ci_adv_creator_role1');
+				columns.push('created');
+				columns.push('custrecord_ci_adv_modified1');
+				columns.push('custrecord_ci_adv_modified_by1');
+				columns.push('custrecord_ci_adv_modified_by_role1');
+				columns.push('lastmodifiedby');
+				columns.push('custrecord_ci_adv_reject_reason1');
+				columns.push('custrecord_ci_adv_approval_status1');
+				columns.push('custrecord_ci_adv_lastmodified_at1');
+				columns.push('custrecord_ci_adv_created_at1');
+				columns.push(search.createColumn({ name: 'lastmodified', sort: search.Sort.DESC }));
+
+				let VBDSearchData = search.create({ type: 'customrecord_ci_adv_approval_history', filters: filters, columns: columns });
 				var pageIndex = context.request.parameters.pageIndex || 0, pageSize = context.request.parameters.pageSize || 100; //rutuja made changes for pagination
 
 				var VBDSearch = getFullResultSet(VBDSearchData, pageIndex, pageSize); //rutuja made changes for pagination
@@ -157,25 +193,26 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 				if (!isEmpty(VBDSearch)) {
 					// Traversing in the Entitlement List Array to populate the permissions from Entitlement Manager Search.
 					for (let vbd = 0; vbd < VBDSearch.length; vbd++) {
-						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified');
+						let modified = VBDSearch[vbd].getValue('custrecord_ci_adv_modified1');
 						let modifiedDate;
 						//If the record has modified 
-						if(modified === false && modified === 'F'){modifiedDate = '';}else{modifiedDate = VBDSearch[vbd].getValue('custrecord_ci_adv_lastmodified_at');}
+						if (modified === false && modified === 'F') { modifiedDate = ''; }
+						else {modifiedDate = VBDSearch[vbd].getValue('custrecord_ci_adv_lastmodified_at1');}
 						VBDlist.push({
-							requestedBy: VBDSearch[vbd].getText('custrecord_ci_adv_createdby'),
-							requestedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_creator_role'),
-							vendorname: VBDSearch[vbd].getText('custrecordci_adv_details'),
-							createdAt: VBDSearch[vbd].getValue('created'),
+							requestedBy: VBDSearch[vbd].getText('custrecord_ci_adv_createdby1'),
+							requestedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_creator_role1'),
+							vendorname: VBDSearch[vbd].getText('custrecord_ci_adv_vendor_name'),
+							createdAt: VBDSearch[vbd].getValue('custrecord_ci_adv_created_at1'),
 							modified: modified,
-							modifiedBy: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by'),
-							modifiedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by_role'),
+							modifiedBy: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by1'),
+							modifiedByRole: VBDSearch[vbd].getText('custrecord_ci_adv_modified_by_role1'),
 							lastModified: modifiedDate,
-							oldValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_old_values')),
-							newValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_edited_values')),
+							oldValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_old_values1')),
+							newValue: cleanObject(VBDSearch[vbd].getValue('custrecord_ci_edited_values1')),
 							actionedAt: VBDSearch[vbd].getValue('lastmodified'),
 							actionedBy: VBDSearch[vbd].getText('lastmodifiedby'),
-							status: VBDSearch[vbd].getText('custrecord_ci_adv_approval_status'),
-							rejectedReason: VBDSearch[vbd].getValue('custrecord_ci_adv_reject_reason'),
+							status: VBDSearch[vbd].getText('custrecord_ci_adv_approval_status1'),
+							rejectedReason: VBDSearch[vbd].getValue('custrecord_ci_adv_reject_reason1'),
 							VBDId: VBDSearch[vbd].id,
 							//isCreatorCurrentUser: isCreatorCurrentUser,
 
@@ -204,34 +241,36 @@ define(['N/search', 'N/record', 'N/query', 'N/log'],
 			}
 
 		}
-		 /**
-     * Find who changed Approval Status and when.
-     *
-     * Your existing Approval Routing API already uses System Notes
-     * for this purpose.
-     */
-    const getApprovalStatusSystemNote = (recordId) => {
-        try {
-				const systemNoteSearch = search.create({ type: 'customrecord_ci_adv_entity_bank_details', filters: [['internalid', 'anyof', recordId]], columns: [search.createColumn({ name: 'date', join: 'systemnotes', sort: search.Sort.DESC }), search.createColumn({ name: 'name', join: 'systemnotes' }), search.createColumn({ name: 'newvalue', join: 'systemnotes' })] });
+		/**
+	* Find who changed Approval Status and when.
+	*
+	* Your existing Approval Routing API already uses System Notes
+	* for this purpose.
+	*/
+		const getApprovalStatusSystemNote = (recordId) => {
+			try {
+				const systemNoteSearch = search.create({ type: 'customrecord_ci_adv_entity_bank_details', filters: [['internalid', 'anyof', recordId]], columns: [search.createColumn({ name: 'date', join: 'systemnotes', sort: search.Sort.DESC }), search.createColumn({ name: 'name', join: 'systemnotes' }), search.createColumn({ name: 'newvalue', join: 'systemnotes' }),'created','lastmodified','lastmodifiedby']});
 				const result = systemNoteSearch.run().getRange({ start: 0, end: 1 });
 
 				if (!result || result.length === 0) { return { lastModifiedAt: '', lastModifiedBy: '' }; }
-            const row = result[0];
-            return {
-					lastModifiedAt: row.getValue({ name: 'date', join: 'systemnotes' }) || '',
-					lastModifiedBy: row.getText({ name: 'name', join: 'systemnotes' }) || row.getValue({ name: 'name', join: 'systemnotes' }) || ''
-            };
-        } catch (e) {
-            log.error({
-                title: 'System Note Search Failed - ' + recordId,
-                details: e
-            });
-            return {
-                lastModifiedBy: '',
-                lastModifiedAt: ''
-            };
-        }
-    };
+				const row = result[0];
+				return {
+					lastModifiedAt: row.getValue({ name: 'lastmodified' }) || '',
+					lastModifiedBy: row.getText({ name: 'lastmodifiedby' }) || row.getValue({ name: 'lastmodifiedby'}) || '',
+					createdAt: row.getValue({ name: 'created' }) || ''
+				};
+			} catch (e) {
+				log.error({
+					title: 'System Note Search Failed - ' + recordId,
+					details: e
+				});
+				return {
+					lastModifiedBy: '',
+					lastModifiedAt: '',
+					createdAt: ''
+				};
+			}
+		};
 		/**
 		 * Retrieves the clean JSON object
 		 * @param {JSON} jsonValue
