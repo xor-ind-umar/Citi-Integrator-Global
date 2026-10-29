@@ -41,20 +41,18 @@ define([
     file
 ) => {
 
-    const RECORD_TYPE = 'customrecord_ci_adv_entity_bank_details';
+    const RECORD_TYPE = 'customrecord_ci_adv_approval_history';
 
-    const STATUS_FIELD = 'custrecord_ci_adv_approval_status';
+    const STATUS_FIELD = 'custrecord_ci_adv_approval_status1';
 
-    const REJECTION_REASON_FIELD = 'custrecord_ci_adv_reject_reason';
+    const REJECTION_REASON_FIELD = 'custrecord_ci_adv_reject_reason1';
 
-    const DETAILS_FIELD = 'custrecordci_adv_details';
+    const VENDOR_NAME = 'custrecord_ci_adv_vendor_name';
 
-    const CREATED_BY_FIELD = 'custrecord_ci_adv_createdby';
+    const CREATED_BY_FIELD = 'custrecord_ci_adv_createdby1';
 
     const APPROVAL_STATUS_SYSTEM_NOTE_FIELD =
-        'CUSTRECORD_CI_ADV_APPROVAL_STATUS';
-
-
+        'custrecord_ci_adv_approval_status1';
     /**
      * Entry point
      */
@@ -89,7 +87,6 @@ define([
                 });
 
             }
-
         } catch (e) {
 
             log.error({
@@ -103,8 +100,6 @@ define([
             });
         }
     };
-
-
     /**
      * GET
      *
@@ -125,13 +120,11 @@ define([
 
             return;
         }
-
         const filters = {
             status: request.parameters.status || 'All',
             fromDate: request.parameters.fromDate || '',
             toDate: request.parameters.toDate || ''
         };
-
         const result = getApprovalHistoryCsvData(filters);
 
         writeJson(context.response, {
@@ -140,8 +133,6 @@ define([
             data: result
         });
     };
-
-
     /**
      * POST
      *
@@ -149,21 +140,20 @@ define([
      */
     const handlePost = (context) => {
 
-       // let requestBody = context.request.body;
-	   let requestBody = context.request.parameters.body;
-	   requestBody = JSON.parse(requestBody);
-        
-         log.debug({
+        // let requestBody = context.request.body;
+        let requestBody = context.request.parameters.body;
+        requestBody = JSON.parse(requestBody);
+
+        log.debug({
             title: 'Approval History Body Data',
             details: requestBody
         });
-		
-		/*let actionBody = requestBody.action;
-		log.debug({
+
+        /*let actionBody = requestBody.action;
+        log.debug({
             title: 'Post Action',
             details: actionBody
         }); */
-		
         if (!requestBody) {
 
             writeJson(context.response, {
@@ -173,16 +163,10 @@ define([
 
             return;
         }
-/* 
-        if (typeof requestBody === 'string') {
-            requestBody = JSON.parse(requestBody);
-        } */
-
         log.debug({
             title: 'Approval History Export Request',
             details: requestBody
         });
-
         if (requestBody.action !== 'exportApprovalHistoryExportData') {
 
             writeJson(context.response, {
@@ -192,36 +176,27 @@ define([
 
             return;
         }
-
         const filters = {
             status: requestBody.status || 'All',
             fromDate: requestBody.fromDate || '',
             toDate: requestBody.toDate || ''
         };
-
         const rows = getApprovalHistoryCsvData(filters);
-
         const csv = buildCsv(rows);
-
         writeJson(context.response, csv)
-            //{
-            /* success: true,
-            fileName: 'Approval_History.csv',
-            contentType: 'text/csv;charset=utf-8',
-            count: rows.length, */
-            //csv: csv});
+        //{
+        /* success: true,
+        fileName: 'Approval_History.csv',
+        contentType: 'text/csv;charset=utf-8',
+        count: rows.length, */
+        //csv: csv});
     };
-
-
     /**
      * Get Approval History records.
      */
     const getApprovalHistoryCsvData = (filters) => {
-
         const statusIds = getApprovalStatusIds();
-
         const searchFilters = [];
-
         /*
          * Only completed approval records.
          *
@@ -235,8 +210,6 @@ define([
                 statusIds.Rejected
             ]
         ]);
-
-
         /*
          * Optional status filter.
          */
@@ -256,8 +229,6 @@ define([
                 [statusIds.Rejected]
             ];
         }
-
-
         /*
          * Optional date filter.
          */
@@ -271,8 +242,6 @@ define([
                 convertIsoDateToNetSuiteDate(filters.fromDate)
             ]);
         }
-
-
         if (filters.toDate) {
 
             searchFilters.push('AND');
@@ -283,8 +252,6 @@ define([
                 convertIsoDateToNetSuiteDate(filters.toDate)
             ]);
         }
-
-
         const columns = [
 
             search.createColumn({
@@ -301,7 +268,7 @@ define([
             }),
 
             search.createColumn({
-                name: DETAILS_FIELD
+                name: VENDOR_NAME
             }),
 
             search.createColumn({
@@ -313,17 +280,17 @@ define([
             }),
 
             search.createColumn({
-                name: 'custrecord_ci_old_values'
+                name: 'custrecord_ci_old_values1'
             }),
 
             search.createColumn({
-                name: 'custrecord_ci_edited_values'
+                name: 'custrecord_ci_edited_values1'
             }),
             search.createColumn({
-                name: 'custrecord_ci_adv_modified_by'
+                name: 'custrecord_ci_adv_modified_by1'
             }),
             search.createColumn({
-                name: 'custrecord_ci_adv_modified'
+                name: 'custrecord_ci_adv_modified1'
             }),
             search.createColumn({
                 name: 'lastmodified'
@@ -331,11 +298,14 @@ define([
             search.createColumn({
                 name: 'lastmodifiedby'
             }),
-            search.createColumn({
+          /*   search.createColumn({
                 name: 'custrecord_ci_adv_modified_by'
+            }), */
+            search.createColumn({
+                name: 'custrecord_ci_adv_lastmodified_at1'
             }),
             search.createColumn({
-                name: 'custrecord_ci_adv_lastmodified_at'
+                name: 'custrecord_ci_adv_created_at1'
             })
         ];
 
@@ -376,55 +346,34 @@ define([
                 });
                 let requestedAt;
                 let requestedBy;
-                const modified = result.getValue('custrecord_ci_adv_modified');
+                const modified = result.getValue('custrecord_ci_adv_modified1');
                 log.debug("Modified", "modified: " + modified);
-                if(modified === true || modified === 'T' || modified === null) {
-                    requestedAt = result.getValue('custrecord_ci_adv_lastmodified_at');
-                    requestedBy = result.getText('custrecord_ci_adv_modified_by');
+                if (modified === true || modified === 'T' || modified === null) {
+                    requestedAt = result.getValue('custrecord_ci_adv_lastmodified_at1');
+                    requestedBy = result.getText('custrecord_ci_adv_modified_by1');
                 }
-                else{
-                    requestedAt = result.getValue('created');
+                else {
+                    requestedAt = result.getValue('custrecord_ci_adv_created_at1');
                     requestedBy = result.getText(CREATED_BY_FIELD);
                 }
-               /*  const requestedAt = result.getValue({
-                    name: 'created'
-                }); */
-
-
-                 /* requestedBy =
-                    result.getText({
-                        name: CREATED_BY_FIELD
-                    }) ||
-                    result.getValue({
-                        name: CREATED_BY_FIELD
-                    }) ||
-                    ''; */
-
-
                 const vendorName =
                     result.getText({
-                        name: DETAILS_FIELD
+                        name: VENDOR_NAME
                     }) ||
                     result.getValue({
-                        name: DETAILS_FIELD
+                        name: VENDOR_NAME
                     }) ||
                     '';
-
-
                 const status =
                     result.getText({
                         name: STATUS_FIELD
                     }) ||
                     '';
-
-
                 const rejectionReason =
                     result.getValue({
                         name: REJECTION_REASON_FIELD
                     }) ||
                     '';
-
-
                 /*
                  * Get the actual user/time that changed
                  * Approval Status.
@@ -750,16 +699,16 @@ define([
      * JSON response helper.
      */
     const writeJson = (response, data) => {
-       /*  response.setHeader({
-            name: 'Content-Type',
-            value: 'application/json; charset=utf-8'
-        }); */
+        /*  response.setHeader({
+             name: 'Content-Type',
+             value: 'application/json; charset=utf-8'
+         }); */
         log.debug({
             title: 'CSV Data',
             details: data
         });
-        let fileObj = file.create({name: 'ApprovalHistoryExport.csv',fileType: file.Type.CSV,contents: data});
-        response.writeFile({file: fileObj,isInline: false});
+        let fileObj = file.create({ name: 'ApprovalHistoryExport.csv', fileType: file.Type.CSV, contents: data });
+        response.writeFile({ file: fileObj, isInline: false });
         /* response.write({
             output: JSON.stringify(data)
         }); */
