@@ -1000,8 +1000,12 @@ define(['N/record', 'N/search', 'N/log', 'N/file', 'N/format'], function (
                 var iban =
                     vendorData['custentity_xor_pay_vendor_iban_sdf'];
               
-              // Always keep CIA IBAN blank for PL555/499/821
+                if (profileCodeForCatch === 'CITIUA_PL_555_ONS_C12_01') {
+                    mappedData['custrecord_ci_adv_vbd_bank_iban'] =
+                        iban && String(iban).trim() !== '' ? iban : accountNumber;
+                } else { // Always keep CIA IBAN blank for 499/821
                 mappedData['custrecord_ci_adv_vbd_bank_iban'] = '';
+                }
 
                 // Both blank -> skip vendor
                 if (
@@ -1018,11 +1022,9 @@ define(['N/record', 'N/search', 'N/log', 'N/file', 'N/format'], function (
                 }
 
                 // First preference = Account Number
-                if (
-                    accountNumber &&
+                if (accountNumber &&
                     String(accountNumber).trim() !== ''
                 ) {
-
                     mappedData['custrecord_ci_adv_account_number'] =
                         accountNumber;
 
@@ -1034,7 +1036,6 @@ define(['N/record', 'N/search', 'N/log', 'N/file', 'N/format'], function (
                     mappedData['custrecord_ci_adv_account_number'] =
                         iban;
                 }
-
                 log.audit({
                     title: 'PL555/499/821 Account Number Override',
                     details: {
@@ -1043,7 +1044,9 @@ define(['N/record', 'N/search', 'N/log', 'N/file', 'N/format'], function (
                         accountNumber: accountNumber,
                         iban: iban,
                         finalAccountNumber:
-                            mappedData['custrecord_ci_adv_account_number']
+                            mappedData['custrecord_ci_adv_account_number'],
+                        finalIban:
+                            mappedData['custrecord_ci_adv_vbd_bank_iban']
                     }
                 });
             }
@@ -1089,22 +1092,40 @@ define(['N/record', 'N/search', 'N/log', 'N/file', 'N/format'], function (
             var existingBankDetail = existingBankDetailSearch.run().getRange({ start: 0, end: 1 });
 
             if (existingBankDetail && existingBankDetail.length > 0) {
+                var existingCiaRecordId = existingBankDetail[0].id;
+                var flagUpdateError = '';
                 try {
-                    record.submitFields({
+                  /*   record.submitFields({
                         type: record.Type.VENDOR,
                         id: vendorId,
                         values: { custentity_xor_pay_ci_vendor_mgrt_sts: true }
-                    });
+                    }); */
                     log.audit({
                         title: 'Existing CI record found - flag corrected',
-                        details: { vendorId: vendorId, ciaRecordId: existingBankDetail[0].getValue('internalid') }
+                        details: { vendorId: vendorId, ciaRecordId: existingCiaRecordId }
                     });
                 } catch (flagErr) {
+                    flagUpdateError = flagErr.message || flagErr.name || 'Unknown error';
                     log.error({
                         title: 'Could not flip migration flag for existing record',
                         details: { vendorId: vendorId, error: flagErr.message }
                     });
                 }
+                context.write({
+                    key: 'ERROR_ROW',
+                    value: JSON.stringify({
+                        vendorId: vendorId,
+                        vendorName: vendorName,
+                        profileCode: profileCodeForCatch,
+                        status: 'Skipped',
+                        category: 'CI Record Already Exists',
+                        message: 'A CI Vendor Bank Details record already exists (ID ' + existingCiaRecordId + ').' +
+                            (flagUpdateError ? ' The migration flag could not be updated: ' + flagUpdateError : '.'),
+                        recommendedAction: flagUpdateError
+                            ? 'Review the existing CI record and then rerun the migration if needed.'
+                            : 'Review the existing CI record if necessary; no new record was created.'
+                    })
+                });
                 log.audit({
                     title: 'EXIT',
                     details: {
